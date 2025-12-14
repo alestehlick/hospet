@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Gestão — Hotel & Banho (MVP)</title>
 
-  <!-- Fonte serif clássica (pode remover se quiser 100% local) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
@@ -22,7 +21,6 @@
     <div class="topbar__right">
       <input id="searchInput" class="search" placeholder="Buscar cachorro ou cliente..." />
       <button id="searchBtn" class="btn btn--ghost">Buscar</button>
-      <button id="logoutBtn" class="btn btn--ghost" title="Sair">Sair</button>
     </div>
   </header>
 
@@ -47,33 +45,13 @@
       </div>
 
       <div id="alerts" class="alerts"></div>
-
       <div id="eventsList" class="events"></div>
     </section>
   </main>
 
-  <!-- LOGIN -->
-  <dialog id="loginDialog" class="dialog" open>
-    <form method="dialog" class="dialog__card" id="loginForm">
-      <h2 class="h2">Acesso</h2>
-      <p class="muted">Este MVP usa uma chave simples para admin (provisório).</p>
-
-      <label class="label">Chave de admin</label>
-      <input id="adminKeyInput" class="input" placeholder="Digite a chave..." autocomplete="off" />
-
-      <div class="dialog__row">
-        <button id="loginBtn" class="btn btn--primary" value="ok">Entrar</button>
-      </div>
-
-      <p class="tiny muted">
-        Dica: depois dá para trocar por login real (Supabase/Firebase/Google OAuth).
-      </p>
-    </form>
-  </dialog>
-
-  <!-- MODAL: NOVO SERVIÇO -->
+  <!-- NEW SERVICE -->
   <dialog id="serviceDialog" class="dialog">
-    <form method="dialog" class="dialog__card" id="serviceForm">
+    <form class="dialog__card" id="serviceForm">
       <h2 class="h2">Novo serviço</h2>
 
       <div class="grid2">
@@ -113,22 +91,22 @@
       <select id="svcDog" class="input"></select>
 
       <label class="label">Observações</label>
-      <textarea id="svcNotes" class="input" rows="3" placeholder="Dieta, temperamento, instruções..."></textarea>
+      <textarea id="svcNotes" class="input" rows="3"></textarea>
 
       <div class="dialog__row">
-        <button class="btn btn--ghost" value="cancel">Cancelar</button>
-        <button id="svcSaveBtn" class="btn btn--primary" value="ok">Salvar</button>
+        <button type="button" class="btn btn--ghost btnCancel">Cancelar</button>
+        <button type="submit" id="svcSaveBtn" class="btn btn--primary">Salvar</button>
       </div>
     </form>
   </dialog>
 
-  <!-- MODAL: NOVA TAREFA -->
+  <!-- NEW TASK -->
   <dialog id="taskDialog" class="dialog">
-    <form method="dialog" class="dialog__card" id="taskForm">
+    <form class="dialog__card" id="taskForm">
       <h2 class="h2">Nova tarefa</h2>
 
       <label class="label">Título *</label>
-      <input id="taskTitle" class="input" placeholder="Ex.: Comprar fita" />
+      <input id="taskTitle" class="input" />
 
       <div class="grid2">
         <div>
@@ -145,15 +123,15 @@
       <textarea id="taskDesc" class="input" rows="3"></textarea>
 
       <div class="dialog__row">
-        <button class="btn btn--ghost" value="cancel">Cancelar</button>
-        <button id="taskSaveBtn" class="btn btn--primary" value="ok">Salvar</button>
+        <button type="button" class="btn btn--ghost btnCancel">Cancelar</button>
+        <button type="submit" id="taskSaveBtn" class="btn btn--primary">Salvar</button>
       </div>
     </form>
   </dialog>
 
-  <!-- MODAL: NOVO CACHORRO -->
+  <!-- NEW DOG -->
   <dialog id="dogDialog" class="dialog">
-    <form method="dialog" class="dialog__card" id="dogForm">
+    <form class="dialog__card" id="dogForm">
       <h2 class="h2">Novo cachorro</h2>
 
       <div class="grid2">
@@ -163,7 +141,7 @@
         </div>
         <div>
           <label class="label">Raça</label>
-          <input id="dogBreed" class="input" placeholder="Ex.: Spitz Alemão" />
+          <input id="dogBreed" class="input" />
         </div>
         <div>
           <label class="label">Idade (anos)</label>
@@ -197,15 +175,15 @@
       <textarea id="dogNotes" class="input" rows="3"></textarea>
 
       <div class="dialog__row">
-        <button class="btn btn--ghost" value="cancel">Cancelar</button>
-        <button id="dogSaveBtn" class="btn btn--primary" value="ok">Salvar</button>
+        <button type="button" class="btn btn--ghost btnCancel">Cancelar</button>
+        <button type="submit" id="dogSaveBtn" class="btn btn--primary">Salvar</button>
       </div>
     </form>
   </dialog>
 
-  <!-- MODAL: NOVO CLIENTE -->
+  <!-- NEW CUSTOMER -->
   <dialog id="customerDialog" class="dialog">
-    <form method="dialog" class="dialog__card" id="customerForm">
+    <form class="dialog__card" id="customerForm">
       <h2 class="h2">Novo cliente</h2>
 
       <label class="label">Nome *</label>
@@ -218,12 +196,12 @@
         </div>
         <div>
           <label class="label">E-mail</label>
-          <input id="custEmail" class="input" placeholder="nome@email.com" />
+          <input id="custEmail" class="input" />
         </div>
       </div>
 
       <label class="label">Endereço</label>
-      <textarea id="custAddress" class="input" rows="2" placeholder="Rua, número, bairro, complemento, portaria..."></textarea>
+      <textarea id="custAddress" class="input" rows="2"></textarea>
 
       <div class="grid2">
         <div>
@@ -241,8 +219,8 @@
       </div>
 
       <div class="dialog__row">
-        <button class="btn btn--ghost" value="cancel">Cancelar</button>
-        <button id="custSaveBtn" class="btn btn--primary" value="ok">Salvar</button>
+        <button type="button" class="btn btn--ghost btnCancel">Cancelar</button>
+        <button type="submit" id="custSaveBtn" class="btn btn--primary">Salvar</button>
       </div>
     </form>
   </dialog>
