@@ -81,14 +81,14 @@ function renderEvents(list){
 
     el.querySelector(".iconX").addEventListener("click", async ()=>{
       if (!confirm("Excluir este evento?")) return;
-      const r = await apiJsonp("deleteEvent", { id: ev.id, kind: ev.kind });
+      const r = await apiJsonp("deleteevent", { id: ev.id, kind: ev.kind });
       if (!r.ok) return alert(r.error || "Falha ao excluir.");
       await loadToday();
     });
 
     el.querySelector(".btnToggle").addEventListener("click", async ()=>{
       const next = ev.operStatus === "concluido" ? "aberto" : "concluido";
-      const r = await apiJsonp("setEventStatus", { id: ev.id, kind: ev.kind, operStatus: next });
+      const r = await apiJsonp("seteventstatus", { id: ev.id, kind: ev.kind, operStatus: next });
       if (!r.ok) return alert(r.error || "Falha ao atualizar.");
       await loadToday();
     });
@@ -99,13 +99,12 @@ function renderEvents(list){
 
 /* ---------- Lookups ---------- */
 async function loadLookups(){
-  const r = await apiJsonp("getLookups", {});
+  const r = await apiGetLookups();
   if (!r.ok) throw new Error(r.error || "Falha ao carregar listas.");
 
   const dogs = r.dogs || [];
   const customers = r.customers || [];
 
-  // service dog select
   const selDog = $("svcDog");
   selDog.innerHTML = "";
   dogs.forEach(d=>{
@@ -115,7 +114,6 @@ async function loadLookups(){
     selDog.appendChild(opt);
   });
 
-  // dog customer select
   const selCust = $("dogCustomer");
   selCust.innerHTML = "";
   customers.forEach(c=>{
@@ -131,7 +129,7 @@ async function loadToday(){
   const date = todayISO();
   $("todayTitle").textContent = `Hoje — ${formatDatePt(date)}`;
 
-  const r = await apiJsonp("getToday", { date });
+  const r = await apiGetToday(date);
   if (!r.ok) throw new Error(r.error || "Falha ao carregar agenda.");
   renderEvents(r.events || []);
 }
@@ -239,7 +237,6 @@ function closeDialog(id){ $(id).close(); }
 
 /* ---------- Wiring ---------- */
 function wire(){
-  // cancel
   document.querySelectorAll(".btnCancel").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const dlg = btn.closest("dialog");
@@ -247,11 +244,9 @@ function wire(){
     });
   });
 
-  // init weekday widgets
   renderWeekdays("rgCrecheDays", "creche");
   renderWeekdays("rgTransDays", "transporte");
 
-  // autocomplete events
   document.addEventListener("click", (e)=>{
     if (!e.target.closest(".searchWrap")) hideSuggest();
   });
@@ -267,31 +262,38 @@ function wire(){
   });
 
   $("searchBtn").addEventListener("click", ()=> runSearch().catch(()=>{}));
-
   $("btnRefresh").addEventListener("click", ()=> boot());
 
-$("btnGenerate").addEventListener("click", async ()=>{
-  try{
-    const startDate = todayISO();
-    const days = 14;
+  $("btnGenerate").addEventListener("click", async ()=>{
+    try{
+      const startDate = todayISO();
+      const days = 14;
 
-    // backend action names are normalized, but use the backend's canonical name
-    const r = await apiJsonp("generatefromregular", { startDate, days });
+      const r = await apiGenerateAgenda(startDate, days);
+      if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
 
-    if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
+      const w = r.window || { dateFrom: r.startDate, dateTo: "" };
+      alert(`Agenda gerada: ${r.created} serviços (janela ${w.dateFrom} → ${w.dateTo})`);
 
-    // backend returns startDate + days (NOT r.window)
-    const end = new Date(startDate + "T00:00:00");
-    end.setDate(end.getDate() + (Number(r.days || days) - 1));
-    const endIso = end.toISOString().slice(0,10);
+      await loadToday();
+    }catch(err){
+      alert(err.message || String(err));
+    }
+  });
 
-    alert(`Agenda gerada: ${r.created || 0} serviços (${r.startDate || startDate} → ${endIso})`);
-    await loadToday();
-  }catch(err){
-    alert(err.message || String(err));
-  }
-});
+  $("btnNewService").addEventListener("click", ()=>{
+    $("svcType").value = "creche";
+    $("svcDate").value = todayISO();
+    $("svcStart").value = "";
+    $("svcEnd").value = "";
+    $("svcPrice").value = defaultPrice("creche");
+    $("svcNotes").value = "";
+    openDialog("serviceDialog");
+  });
 
+  $("svcType").addEventListener("change", ()=>{
+    $("svcPrice").value = defaultPrice($("svcType").value);
+  });
 
   $("serviceForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
@@ -306,7 +308,7 @@ $("btnGenerate").addEventListener("click", async ()=>{
       source: "manual",
     };
     if (!payload.date || !payload.dogId) return alert("Preencha data e cachorro.");
-    const r = await apiJsonp("addService", payload);
+    const r = await apiJsonp("addservice", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar serviço.");
     closeDialog("serviceDialog");
     await loadToday();
@@ -329,7 +331,7 @@ $("btnGenerate").addEventListener("click", async ()=>{
       desc: $("taskDesc").value,
     };
     if (!payload.title) return alert("Título é obrigatório.");
-    const r = await apiJsonp("addTask", payload);
+    const r = await apiJsonp("addtask", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar tarefa.");
     closeDialog("taskDialog");
     await loadToday();
@@ -358,7 +360,7 @@ $("btnGenerate").addEventListener("click", async ()=>{
       creditBanho: Number($("custCreditBanho").value || 0),
     };
     if (!payload.name) return alert("Nome é obrigatório.");
-    const r = await apiJsonp("addCustomer", payload);
+    const r = await apiJsonp("addcustomer", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar cliente.");
     closeDialog("customerDialog");
     await loadLookups();
@@ -400,15 +402,14 @@ $("btnGenerate").addEventListener("click", async ()=>{
     };
     if (!payload.name || !payload.customerId) return alert("Nome e cliente são obrigatórios.");
 
-    const r = await apiJsonp("addDog", payload);
+    const r = await apiJsonp("adddog", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar cachorro.");
 
     const dogId = r.id;
 
-    // Regular services if selected
     const crecheW = getSelectedWeekdays("creche");
     if (crecheW){
-      const rr = await apiJsonp("addRegularService", {
+      const rr = await apiJsonp("addregularservice", {
         dogId,
         type: "creche",
         weekdays: crecheW,
@@ -422,7 +423,7 @@ $("btnGenerate").addEventListener("click", async ()=>{
 
     const transW = getSelectedWeekdays("transporte");
     if (transW){
-      const rr = await apiJsonp("addRegularService", {
+      const rr = await apiJsonp("addregularservice", {
         dogId,
         type: "transporte",
         weekdays: transW,
@@ -443,7 +444,7 @@ $("btnGenerate").addEventListener("click", async ()=>{
 async function boot(){
   try{
     setApiStatus("Conectando…");
-    const ping = await apiJsonp("ping", {});
+    const ping = await apiPing();
     if (!ping.ok) throw new Error(ping.error || "API offline.");
     setApiStatus("API OK");
 
