@@ -81,14 +81,14 @@ function renderEvents(list){
 
     el.querySelector(".iconX").addEventListener("click", async ()=>{
       if (!confirm("Excluir este evento?")) return;
-      const r = await apiJsonp("deleteevent", { id: ev.id, kind: ev.kind });
+      const r = await apiJsonp("deleteEvent", { id: ev.id, kind: ev.kind });
       if (!r.ok) return alert(r.error || "Falha ao excluir.");
       await loadToday();
     });
 
     el.querySelector(".btnToggle").addEventListener("click", async ()=>{
       const next = ev.operStatus === "concluido" ? "aberto" : "concluido";
-      const r = await apiJsonp("seteventstatus", { id: ev.id, kind: ev.kind, operStatus: next });
+      const r = await apiJsonp("setEventStatus", { id: ev.id, kind: ev.kind, operStatus: next });
       if (!r.ok) return alert(r.error || "Falha ao atualizar.");
       await loadToday();
     });
@@ -99,7 +99,7 @@ function renderEvents(list){
 
 /* ---------- Lookups ---------- */
 async function loadLookups(){
-  const r = await apiGetLookups();
+  const r = await apiJsonp("getLookups", {});
   if (!r.ok) throw new Error(r.error || "Falha ao carregar listas.");
 
   const dogs = r.dogs || [];
@@ -129,7 +129,7 @@ async function loadToday(){
   const date = todayISO();
   $("todayTitle").textContent = `Hoje — ${formatDatePt(date)}`;
 
-  const r = await apiGetToday(date);
+  const r = await apiJsonp("getToday", { date });
   if (!r.ok) throw new Error(r.error || "Falha ao carregar agenda.");
   renderEvents(r.events || []);
 }
@@ -191,6 +191,7 @@ async function refreshSuggest(){
 async function runSearch(){
   const q = $("searchInput").value.trim();
   if (!q) return;
+
   const r = await apiJsonp("search", { q });
   if (!r.ok) return alert(r.error || "Falha na busca.");
 
@@ -267,14 +268,9 @@ function wire(){
   $("btnGenerate").addEventListener("click", async ()=>{
     try{
       const startDate = todayISO();
-      const days = 14;
-
-      const r = await apiGenerateAgenda(startDate, days);
+      const r = await apiJsonp("generateFromRegular", { startDate, days: 14 });
       if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
-
-      const w = r.window || { dateFrom: r.startDate, dateTo: "" };
-      alert(`Agenda gerada: ${r.created} serviços (janela ${w.dateFrom} → ${w.dateTo})`);
-
+      alert(`Agenda gerada: ${r.created} serviços (janela ${r.startDate} → ${r.days} dias)`);
       await loadToday();
     }catch(err){
       alert(err.message || String(err));
@@ -308,7 +304,7 @@ function wire(){
       source: "manual",
     };
     if (!payload.date || !payload.dogId) return alert("Preencha data e cachorro.");
-    const r = await apiJsonp("addservice", payload);
+    const r = await apiJsonp("addService", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar serviço.");
     closeDialog("serviceDialog");
     await loadToday();
@@ -331,7 +327,7 @@ function wire(){
       desc: $("taskDesc").value,
     };
     if (!payload.title) return alert("Título é obrigatório.");
-    const r = await apiJsonp("addtask", payload);
+    const r = await apiJsonp("addTask", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar tarefa.");
     closeDialog("taskDialog");
     await loadToday();
@@ -360,7 +356,7 @@ function wire(){
       creditBanho: Number($("custCreditBanho").value || 0),
     };
     if (!payload.name) return alert("Nome é obrigatório.");
-    const r = await apiJsonp("addcustomer", payload);
+    const r = await apiJsonp("addCustomer", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar cliente.");
     closeDialog("customerDialog");
     await loadLookups();
@@ -402,14 +398,14 @@ function wire(){
     };
     if (!payload.name || !payload.customerId) return alert("Nome e cliente são obrigatórios.");
 
-    const r = await apiJsonp("adddog", payload);
+    const r = await apiJsonp("addDog", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar cachorro.");
 
     const dogId = r.id;
 
     const crecheW = getSelectedWeekdays("creche");
     if (crecheW){
-      const rr = await apiJsonp("addregularservice", {
+      const rr = await apiJsonp("addRegularService", {
         dogId,
         type: "creche",
         weekdays: crecheW,
@@ -423,7 +419,7 @@ function wire(){
 
     const transW = getSelectedWeekdays("transporte");
     if (transW){
-      const rr = await apiJsonp("addregularservice", {
+      const rr = await apiJsonp("addRegularService", {
         dogId,
         type: "transporte",
         weekdays: transW,
@@ -444,7 +440,7 @@ function wire(){
 async function boot(){
   try{
     setApiStatus("Conectando…");
-    const ping = await apiPing();
+    const ping = await apiJsonp("ping", {});
     if (!ping.ok) throw new Error(ping.error || "API offline.");
     setApiStatus("API OK");
 
