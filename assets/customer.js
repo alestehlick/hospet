@@ -1,4 +1,5 @@
 function badge(text){ return `<span class="badge">${escapeHtml(text)}</span>`; }
+
 function labelType(t){
   const m = { creche:"Creche", diaria:"Diária", banho:"Banho", tosa_higienica:"Tosa higiênica", transporte:"Transporte", outro:"Outro" };
   return m[t] || t;
@@ -43,13 +44,11 @@ async function boot(){
   const id = qs("id");
   if (!id) return alert("Falta ?id=");
 
-  const r1 = await apiJsonp("getCustomer", { id });
-  if (!r1.ok) return alert(r1.error || "Falha ao carregar cliente.");
-  renderCustomer(r1.customer);
+  const r = await apiJsonp("getCustomer", { id });
+  if (!r.ok) return alert(r.error || "Falha ao carregar cliente.");
 
-  const r2 = await apiJsonp("getCustomerServices", { customerId: id });
-  if (!r2.ok) return alert(r2.error || "Falha ao carregar serviços.");
-  renderServices(r2.services || []);
+  renderCustomer(r.customer);
+  renderServices(r.services || []);
 }
 
 boot().catch(e=>alert(e.message||String(e)));
