@@ -72,17 +72,12 @@ async function boot(){
   const id = qs("id");
   if (!id) return alert("Falta ?id=");
 
-  const r1 = await apiJsonp("getDog", { id });
-  if (!r1.ok) return alert(r1.error || "Falha ao carregar cachorro.");
-  renderDog(r1.dog);
+  const r = await apiJsonp("getDog", { id });
+  if (!r.ok) return alert(r.error || "Falha ao carregar cachorro.");
 
-  const r2 = await apiJsonp("listRegularByDog", { dogId: id });
-  if (!r2.ok) return alert(r2.error || "Falha ao carregar regulares.");
-  renderRegular(r2.regular || []);
-
-  const r3 = await apiJsonp("getDogServices", { dogId: id });
-  if (!r3.ok) return alert(r3.error || "Falha ao carregar serviços.");
-  renderServices(r3.services || []);
+  renderDog(r.dog);
+  renderRegular(r.regularServices || []);
+  renderServices(r.services || []);
 }
 
 boot().catch(e=>alert(e.message||String(e)));
