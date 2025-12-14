@@ -5,7 +5,7 @@
 
 const CONFIG = {
   // Cole aqui a URL do Web App do Apps Script (deploy)
-  API_URL: "COLE_AQUI_A_URL_DO_WEB_APP",
+  API_URL: "https://script.google.com/macros/s/AKfycbzOY4pOx2Cvjjp3lwCczoPBhdt8ZZClwQYMayajbZDCTuzLnGX7E1RkC7_y2hqOvaGp/exec",
   // Chave simples (provisória). Deve bater com a do Apps Script.
   ADMIN_KEY: localStorage.getItem("ADMIN_KEY") || "",
 };
