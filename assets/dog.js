@@ -1,4 +1,15 @@
+let _dog = null;
+let _lookups = null;
+
 function badge(text){ return `<span class="badge">${escapeHtml(text)}</span>`; }
+
+function labelType(t){
+  const m = { creche:"Creche", diaria:"Diária", banho:"Banho", tosa_higienica:"Tosa higiênica", transporte:"Transporte", outro:"Outro" };
+  return m[t] || t;
+}
+
+function openDialog(id){ $(id).showModal(); }
+function closeDialog(id){ $(id).close(); }
 
 function renderDog(d){
   $("title").textContent = d.name ? `Cachorro — ${d.name}` : "Cachorro";
@@ -17,11 +28,6 @@ function renderDog(d){
     <div class="sub"><b>Saúde:</b> ${escapeHtml(d.health || "-")}</div>
     <div class="sub"><b>Observações:</b> ${escapeHtml(d.notes || "-")}</div>
   `;
-}
-
-function labelType(t){
-  const m = { creche:"Creche", diaria:"Diária", banho:"Banho", tosa_higienica:"Tosa higiênica", transporte:"Transporte", outro:"Outro" };
-  return m[t] || t;
 }
 
 function renderRegular(list){
@@ -68,16 +74,85 @@ function renderServices(list){
   });
 }
 
+async function loadLookups(){
+  const r = await apiJsonp("getLookups", {});
+  if (!r.ok) throw new Error(r.error || "Falha ao carregar lookups.");
+  _lookups = r;
+}
+
+function fillCustomerSelect(selectedId){
+  const sel = $("edCustomer");
+  sel.innerHTML = "";
+  (_lookups?.customers || []).forEach(c=>{
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.name;
+    if (String(c.id) === String(selectedId)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function wireEditDog(){
+  $("btnCancelDogEdit").addEventListener("click", ()=> closeDialog("dogEditDialog"));
+
+  $("btnEditDog").addEventListener("click", async ()=>{
+    if (!_dog) return;
+    if (!_lookups) await loadLookups();
+
+    $("edName").value = _dog.name || "";
+    $("edBreed").value = _dog.breed || "";
+    $("edBirthDate").value = _dog.birthDate || "";
+    $("edPhotoUrl").value = _dog.photoUrl || "";
+    $("edDiet").value = _dog.diet || "";
+    $("edTemperament").value = _dog.temperament || "";
+    $("edVaccines").value = _dog.vaccines || "";
+    $("edHealth").value = _dog.health || "";
+    $("edNotes").value = _dog.notes || "";
+
+    fillCustomerSelect(_dog.customerId);
+
+    openDialog("dogEditDialog");
+  });
+
+  $("dogEditForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    if (!_dog) return;
+
+    const payload = {
+      id: _dog.id,
+      name: $("edName").value.trim(),
+      breed: $("edBreed").value.trim(),
+      birthDate: $("edBirthDate").value,
+      customerId: $("edCustomer").value,
+      photoUrl: $("edPhotoUrl").value.trim(),
+      diet: $("edDiet").value,
+      temperament: $("edTemperament").value,
+      vaccines: $("edVaccines").value,
+      health: $("edHealth").value,
+      notes: $("edNotes").value,
+    };
+
+    const r = await apiJsonp("updateDog", payload);
+    if (!r.ok) return alert(r.error || "Falha ao atualizar cachorro.");
+
+    closeDialog("dogEditDialog");
+    await boot();
+  });
+}
+
 async function boot(){
   const id = qs("id");
   if (!id) return alert("Falta ?id=");
 
-  const r = await apiJsonp("getDog", { id });
-  if (!r.ok) return alert(r.error || "Falha ao carregar cachorro.");
+  const r1 = await apiJsonp("getDog", { id });
+  if (!r1.ok) return alert(r1.error || "Falha ao carregar cachorro.");
 
-  renderDog(r.dog);
-  renderRegular(r.regularServices || []);
-  renderServices(r.services || []);
+  _dog = r1.dog;
+
+  renderDog(r1.dog);
+  renderRegular(r1.regularServices || []);
+  renderServices(r1.services || []);
 }
 
+wireEditDog();
 boot().catch(e=>alert(e.message||String(e)));
