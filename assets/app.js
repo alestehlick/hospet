@@ -43,11 +43,16 @@ function apiJsonp(action, payload = {}){
     const cb = "cb_" + Math.random().toString(36).slice(2);
     window[cb] = (resp)=>{ cleanup(); resolve(resp); };
 
+    // base64 payload
     const dataB64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+
     const url = new URL(CONFIG.API_URL);
     url.searchParams.set("action", action);
     url.searchParams.set("callback", cb);
     url.searchParams.set("data", dataB64);
+
+    // IMPORTANT: cache buster (prevents cached JSONP responses)
+    url.searchParams.set("_", Date.now().toString());
 
     const script = document.createElement("script");
     script.src = url.toString();
@@ -60,6 +65,11 @@ function apiJsonp(action, payload = {}){
       if (script && script.parentNode) script.parentNode.removeChild(script);
     }
   });
+}
+
+// Optional: health check helper (works because backend now supports JSONP for healthz)
+function apiHealthz(){
+  return apiJsonp("healthz", {});
 }
 
 function qs(name){
