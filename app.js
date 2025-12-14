@@ -196,4 +196,236 @@ function fillSelectDogs(dogs){
   for (const d of dogs){
     const opt = document.createElement("option");
     opt.value = d.id;
-    opt.textContent = d.name + (d.customerName ?
+    opt.textContent = d.name + (d.customerName ? ` (Tutor: ${d.customerName})` : "");
+    sel.appendChild(opt);
+  }
+}
+
+function fillSelectCustomers(customers){
+  const sel = $("dogCustomer");
+  sel.innerHTML = "";
+  for (const c of customers){
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  }
+}
+
+async function loadToday(){
+  clearAlert();
+  const date = todayISO();
+  $("todayTitle").textContent = `Hoje — ${formatDatePt(date)}`;
+
+  const r = await jsonp("getToday", { date });
+  if (r.ok === false) throw new Error(r.error || "Failed to load today.");
+  renderEvents(r.events || []);
+}
+
+async function runSearch(){
+  const q = $("searchInput").value.trim();
+  if (!q) return;
+  const r = await jsonp("search", { q });
+  if (r.ok === false) throw new Error(r.error || "Search failed.");
+
+  const dogs = r.dogs || [];
+  const customers = r.customers || [];
+  const lines = [];
+  if (dogs.length) lines.push("Cachorros:\n" + dogs.map(d => `• ${d.name} (Tutor: ${d.customerName || "-"})`).join("\n"));
+  if (customers.length) lines.push("Clientes:\n" + customers.map(c => `• ${c.name} (${c.whatsapp || "-"})`).join("\n"));
+  alert(lines.length ? lines.join("\n\n") : "Nada encontrado.");
+}
+
+function wireUI(){
+  // Cancel buttons close dialogs
+  document.querySelectorAll(".btnCancel").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const dlg = btn.closest("dialog");
+      if (dlg) dlg.close();
+    });
+  });
+
+  $("btnRefresh").addEventListener("click", () => boot());
+
+  $("btnNewService").addEventListener("click", () => {
+    $("svcType").value = "creche";
+    $("svcDate").value = todayISO();
+    $("svcStart").value = "";
+    $("svcEnd").value = "";
+    $("svcPrice").value = defaultPriceFor("creche");
+    $("svcNotes").value = "";
+    openDialog("serviceDialog");
+  });
+
+  $("svcType").addEventListener("change", () => {
+    $("svcPrice").value = defaultPriceFor($("svcType").value);
+  });
+
+  $("serviceForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      type: $("svcType").value,
+      date: $("svcDate").value,
+      startTime: $("svcStart").value,
+      endTime: $("svcEnd").value,
+      price: Number($("svcPrice").value || 0),
+      dogId: $("svcDog").value,
+      notes: $("svcNotes").value,
+    };
+    if (!payload.date || !payload.dogId) { alert("Preencha data e cachorro."); return; }
+
+    try{
+      const r = await jsonp("addService", payload);
+      if (r.ok === false) throw new Error(r.error || "Failed to save service.");
+      closeDialog("serviceDialog");
+      await loadToday();
+    }catch(err){
+      alert(err.message || String(err));
+    }
+  });
+
+  $("btnNewTask").addEventListener("click", () => {
+    $("taskTitle").value = "";
+    $("taskDate").value = todayISO();
+    $("taskTime").value = "";
+    $("taskDesc").value = "";
+    openDialog("taskDialog");
+  });
+
+  $("taskForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      title: $("taskTitle").value.trim(),
+      date: $("taskDate").value,
+      time: $("taskTime").value,
+      desc: $("taskDesc").value,
+    };
+    if (!payload.title) { alert("Título é obrigatório."); return; }
+
+    try{
+      const r = await jsonp("addTask", payload);
+      if (r.ok === false) throw new Error(r.error || "Failed to save task.");
+      closeDialog("taskDialog");
+      await loadToday();
+    }catch(err){
+      alert(err.message || String(err));
+    }
+  });
+
+  $("btnNewCustomer").addEventListener("click", () => {
+    $("custName").value = "";
+    $("custWhatsapp").value = "";
+    $("custEmail").value = "";
+    $("custAddress").value = "";
+    $("custCreditCreche").value = 0;
+    $("custCreditTransp").value = 0;
+    $("custCreditBanho").value = 0;
+    openDialog("customerDialog");
+  });
+
+  $("customerForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      name: $("custName").value.trim(),
+      whatsapp: $("custWhatsapp").value.trim(),
+      email: $("custEmail").value.trim(),
+      address: $("custAddress").value.trim(),
+      creditCreche: Number($("custCreditCreche").value || 0),
+      creditTransp: Number($("custCreditTransp").value || 0),
+      creditBanho: Number($("custCreditBanho").value || 0),
+    };
+    if (!payload.name) { alert("Nome é obrigatório."); return; }
+
+    try{
+      const r = await jsonp("addCustomer", payload);
+      if (r.ok === false) throw new Error(r.error || "Failed to save customer.");
+      closeDialog("customerDialog");
+      await loadLookups();
+      await loadToday();
+    }catch(err){
+      alert(err.message || String(err));
+    }
+  });
+
+  $("btnNewDog").addEventListener("click", () => {
+    $("dogName").value = "";
+    $("dogBreed").value = "";
+    $("dogAgeYears").value = 0;
+    $("dogAgeMonths").value = 0;
+    $("dogPhotoUrl").value = "";
+    $("dogDiet").value = "";
+    $("dogTemper").value = "";
+    $("dogVaccines").value = "";
+    $("dogHealth").value = "";
+    $("dogNotes").value = "";
+    openDialog("dogDialog");
+  });
+
+  $("dogForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      name: $("dogName").value.trim(),
+      breed: $("dogBreed").value.trim(),
+      ageYears: Number($("dogAgeYears").value || 0),
+      ageMonths: Number($("dogAgeMonths").value || 0),
+      customerId: $("dogCustomer").value,
+      photoUrl: $("dogPhotoUrl").value.trim(),
+      diet: $("dogDiet").value,
+      temperament: $("dogTemper").value,
+      vaccines: $("dogVaccines").value,
+      health: $("dogHealth").value,
+      notes: $("dogNotes").value,
+    };
+    if (!payload.name || !payload.customerId) { alert("Nome e cliente são obrigatórios."); return; }
+
+    try{
+      const r = await jsonp("addDog", payload);
+      if (r.ok === false) throw new Error(r.error || "Failed to save dog.");
+      closeDialog("dogDialog");
+      await loadLookups();
+      await loadToday();
+    }catch(err){
+      alert(err.message || String(err));
+    }
+  });
+
+  $("searchBtn").addEventListener("click", async () => {
+    try { await runSearch(); } catch (err) { alert(err.message || String(err)); }
+  });
+  $("searchInput").addEventListener("keydown", async (e) => {
+    if (e.key === "Enter") {
+      try { await runSearch(); } catch (err) { alert(err.message || String(err)); }
+    }
+  });
+
+  $("btnEventLog").addEventListener("click", async () => {
+    const q = prompt("Log de eventos — digite uma data (YYYY-MM-DD) ou deixe vazio para hoje:", todayISO());
+    const date = (q && q.trim()) ? q.trim() : todayISO();
+    try{
+      const r = await jsonp("getToday", { date });
+      if (r.ok === false) throw new Error(r.error || "Failed.");
+      alert(`Eventos em ${date}: ${r.events?.length || 0}\n(Em breve: tela de log)`);
+    }catch(err){
+      alert(err.message || String(err));
+    }
+  });
+}
+
+async function boot(){
+  try{
+    if (!CONFIG.API_URL || CONFIG.API_URL.includes("PASTE_YOUR")) {
+      setAlert("Configure CONFIG.API_URL em app.js com a URL do Web App do Apps Script.");
+      return;
+    }
+    await loadLookups();
+    await loadToday();
+  }catch(err){
+    console.error(err);
+    setAlert(err.message || String(err));
+  }
+}
+
+(function init(){
+  wireUI();
+  boot();
+})();
