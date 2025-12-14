@@ -1,30 +1,55 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Cliente — Hotel & Banho</title>
-  <link rel="stylesheet" href="assets/style.css"/>
-</head>
-<body>
-  <div class="wrap">
-    <div class="header">
-      <div>
-        <h1 id="title">Cliente</h1>
-        <div class="sub" id="subtitle"></div>
+function badge(text){ return `<span class="badge">${escapeHtml(text)}</span>`; }
+function labelType(t){
+  const m = { creche:"Creche", diaria:"Diária", banho:"Banho", tosa_higienica:"Tosa higiênica", transporte:"Transporte", outro:"Outro" };
+  return m[t] || t;
+}
+
+function renderCustomer(c){
+  $("title").textContent = c.name ? `Cliente — ${c.name}` : "Cliente";
+  $("subtitle").textContent = c.whatsapp ? `WhatsApp: ${c.whatsapp}` : "";
+
+  $("custCard").innerHTML = `
+    <div class="section-title">Dados</div>
+    <div class="sub">Email: ${escapeHtml(c.email || "-")}</div>
+    <div class="sub">Endereço: ${escapeHtml(c.address || "-")}</div>
+    <hr class="sep"/>
+    <div class="sub"><b>Créditos:</b> creche ${escapeHtml(c.creditCreche||0)} • transporte ${escapeHtml(c.creditTransp||0)} • banho ${escapeHtml(c.creditBanho||0)}</div>
+  `;
+}
+
+function renderServices(list){
+  const root = $("serviceList");
+  root.innerHTML = "";
+  if (!list.length){
+    root.innerHTML = `<div class="event"><div class="event__title">Nenhum serviço registrado.</div></div>`;
+    return;
+  }
+  list.slice().reverse().forEach(s=>{
+    const el = document.createElement("div");
+    el.className = "event bg-hotelOpen";
+    el.innerHTML = `
+      <div class="event__title">${escapeHtml(labelType(s.type))} — ${escapeHtml(s.dogName || "Cachorro")}</div>
+      <div class="event__meta">${escapeHtml(s.date || "")} ${s.source==="regular" ? "• Regular" : ""}</div>
+      <div class="event__badges">
+        ${badge(`R$ ${formatMoney(s.price||0)}`)}
+        ${badge(s.operStatus || "")}
       </div>
-      <div class="sub"><a href="index.html">← Voltar</a></div>
-    </div>
+    `;
+    root.appendChild(el);
+  });
+}
 
-    <div class="card" id="custCard"></div>
+async function boot(){
+  const id = qs("id");
+  if (!id) return alert("Falta ?id=");
 
-    <div class="card">
-      <div class="section-title">Histórico de serviços (todos os cães)</div>
-      <div id="serviceList" class="events"></div>
-    </div>
-  </div>
+  const r1 = await apiJsonp("getCustomer", { id });
+  if (!r1.ok) return alert(r1.error || "Falha ao carregar cliente.");
+  renderCustomer(r1.customer);
 
-  <script src="assets/app.js"></script>
-  <script src="assets/customer.js"></script>
-</body>
-</html>
+  const r2 = await apiJsonp("getCustomerServices", { customerId: id });
+  if (!r2.ok) return alert(r2.error || "Falha ao carregar serviços.");
+  renderServices(r2.services || []);
+}
+
+boot().catch(e=>alert(e.message||String(e)));
