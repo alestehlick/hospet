@@ -3,7 +3,7 @@
    ========================================================= */
 
 const CONFIG = {
-  // MUST be the SAME deployment as the backend code above
+  // MUST be the SAME deployment as the backend code
   API_URL: "https://script.google.com/macros/s/AKfycbxWN-dz9zvcI0sxYuNT0mFAmn3kSR0kGTTzD2THneTlfsVgD1uTjC8SMneffSOZPyVqlw/exec",
 };
 
@@ -37,7 +37,7 @@ function formatMoney(n){
   return v.toFixed(2).replace(".", ",");
 }
 
-// UTF-8 safe base64 (no unescape/encodeURIComponent issues)
+// UTF-8 safe base64
 function b64utf8(obj){
   const json = JSON.stringify(obj ?? {});
   const bytes = new TextEncoder().encode(json);
@@ -91,9 +91,11 @@ function apiJsonp(action, payload = {}){
   });
 }
 
-// Convenience wrappers that MATCH backend payload keys exactly:
+/* ---- wrappers (opcional, mas deixam tudo consistente) ---- */
 function apiHealthz(){ return apiJsonp("healthz", {}); }
 function apiVersion(){ return apiJsonp("version", {}); }
+function apiPing(){ return apiJsonp("ping", {}); }
+function apiGetLookups(){ return apiJsonp("getlookups", {}); }
 function apiGetToday(dateIso = todayISO()){ return apiJsonp("gettoday", { date: dateIso }); }
 function apiGenerateAgenda(startDate = todayISO(), days = 7){
   return apiJsonp("generatefromregular", { startDate, days });
@@ -115,3 +117,6 @@ function calcAgeFromBirth(birthIso){
   if (years < 0) return "";
   return `${years}a ${months}m`;
 }
+
+/* expose same CONFIG (don’t duplicate it) */
+window.CONFIG = CONFIG;
