@@ -13,7 +13,10 @@
         <h1 id="title">Cachorro</h1>
         <div class="sub" id="subtitle"></div>
       </div>
-      <div class="sub"><a href="index.html">← Voltar</a></div>
+      <div class="sub" style="display:flex; gap:10px; align-items:center;">
+        <button class="btn btn--ghost" id="btnEditDog">Editar</button>
+        <a href="index.html">← Voltar</a>
+      </div>
     </div>
 
     <div class="card" id="dogCard"></div>
@@ -28,6 +31,67 @@
       <div id="serviceList" class="events"></div>
     </div>
   </div>
+
+  <!-- DIALOG: EDIT DOG -->
+  <dialog id="dogEditDialog">
+    <div class="section-title">Editar cachorro</div>
+    <form id="dogEditForm">
+      <div class="full">
+        <label>Nome</label>
+        <input id="edName" required/>
+      </div>
+
+      <div>
+        <label>Raça</label>
+        <input id="edBreed"/>
+      </div>
+
+      <div>
+        <label>Nascimento</label>
+        <input id="edBirthDate" type="date"/>
+      </div>
+
+      <div class="full">
+        <label>Tutor (cliente)</label>
+        <select id="edCustomer"></select>
+      </div>
+
+      <div class="full">
+        <label>Foto (URL)</label>
+        <input id="edPhotoUrl"/>
+      </div>
+
+      <div class="full">
+        <label>Dieta</label>
+        <textarea id="edDiet"></textarea>
+      </div>
+
+      <div class="full">
+        <label>Temperamento</label>
+        <textarea id="edTemperament"></textarea>
+      </div>
+
+      <div class="full">
+        <label>Vacinas</label>
+        <textarea id="edVaccines"></textarea>
+      </div>
+
+      <div class="full">
+        <label>Saúde</label>
+        <textarea id="edHealth"></textarea>
+      </div>
+
+      <div class="full">
+        <label>Observações</label>
+        <textarea id="edNotes"></textarea>
+      </div>
+
+      <div class="full" style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="btn btn--ghost" id="btnCancelDogEdit">Cancelar</button>
+        <button class="btn btn--big" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="assets/app.js"></script>
   <script src="assets/dog.js"></script>
