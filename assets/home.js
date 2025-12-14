@@ -191,7 +191,6 @@ async function refreshSuggest(){
 async function runSearch(){
   const q = $("searchInput").value.trim();
   if (!q) return;
-
   const r = await apiJsonp("search", { q });
   if (!r.ok) return alert(r.error || "Falha na busca.");
 
@@ -263,6 +262,7 @@ function wire(){
   });
 
   $("searchBtn").addEventListener("click", ()=> runSearch().catch(()=>{}));
+
   $("btnRefresh").addEventListener("click", ()=> boot());
 
   $("btnGenerate").addEventListener("click", async ()=>{
@@ -270,7 +270,7 @@ function wire(){
       const startDate = todayISO();
       const r = await apiJsonp("generateFromRegular", { startDate, days: 14 });
       if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
-      alert(`Agenda gerada: ${r.created} serviços (janela ${r.startDate} → ${r.days} dias)`);
+      alert(`Agenda gerada: ${r.created} serviços (a partir de ${r.startDate} por ${r.days} dias)`);
       await loadToday();
     }catch(err){
       alert(err.message || String(err));
