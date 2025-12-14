@@ -270,31 +270,28 @@ function wire(){
 
   $("btnRefresh").addEventListener("click", ()=> boot());
 
-  $("btnGenerate").addEventListener("click", async ()=>{
-    try{
-      const dateFrom = todayISO();
-      const r = await apiJsonp("generateFromRegular", { dateFrom, days: 14 });
-      if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
-      alert(`Agenda gerada: ${r.created} serviços (janela ${r.window.dateFrom} → ${r.window.dateTo})`);
-      await loadToday();
-    }catch(err){
-      alert(err.message || String(err));
-    }
-  });
+$("btnGenerate").addEventListener("click", async ()=>{
+  try{
+    const startDate = todayISO();
+    const days = 14;
 
-  $("btnNewService").addEventListener("click", ()=>{
-    $("svcType").value = "creche";
-    $("svcDate").value = todayISO();
-    $("svcStart").value = "";
-    $("svcEnd").value = "";
-    $("svcPrice").value = defaultPrice("creche");
-    $("svcNotes").value = "";
-    openDialog("serviceDialog");
-  });
+    // backend action names are normalized, but use the backend's canonical name
+    const r = await apiJsonp("generatefromregular", { startDate, days });
 
-  $("svcType").addEventListener("change", ()=>{
-    $("svcPrice").value = defaultPrice($("svcType").value);
-  });
+    if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
+
+    // backend returns startDate + days (NOT r.window)
+    const end = new Date(startDate + "T00:00:00");
+    end.setDate(end.getDate() + (Number(r.days || days) - 1));
+    const endIso = end.toISOString().slice(0,10);
+
+    alert(`Agenda gerada: ${r.created || 0} serviços (${r.startDate || startDate} → ${endIso})`);
+    await loadToday();
+  }catch(err){
+    alert(err.message || String(err));
+  }
+});
+
 
   $("serviceForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
