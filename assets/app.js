@@ -1,5 +1,8 @@
 /* =========================================================
-   Shared Frontend Helpers (JSONP)
+   Shared Frontend Helpers (JSONP) + Speed Optimizations
+   - local write queue (write-behind)
+   - optimistic UX hooks
+   - small in-memory cache (lookups / today)
    ========================================================= */
 
 const CONFIG = {
@@ -45,7 +48,7 @@ function b64utf8(obj){
   return btoa(bin);
 }
 
-function apiJsonp(action, payload = {}){
+function apiJsonp(action, payload = {}, { timeoutMs = 15000 } = {}){
   return new Promise((resolve, reject)=>{
     if (!CONFIG.API_URL) return reject(new Error("CONFIG.API_URL não configurado."));
 
@@ -72,7 +75,7 @@ function apiJsonp(action, payload = {}){
       if (finished) return;
       cleanup();
       reject(new Error("JSONP timeout."));
-    }, 15000);
+    }, timeoutMs);
 
     script.onerror = ()=>{
       if (finished) return;
@@ -88,6 +91,117 @@ function apiJsonp(action, payload = {}){
       if (script && script.parentNode) script.parentNode.removeChild(script);
     }
   });
+}
+
+/* =========================================================
+   Small frontend cache (reduces repeat calls during bursts)
+========================================================= */
+const _memCache = new Map(); // key -> {exp:number, value:any}
+function cacheGet(key){
+  const it = _memCache.get(key);
+  if (!it) return null;
+  if (Date.now() > it.exp) { _memCache.delete(key); return null; }
+  return it.value;
+}
+function cachePut(key, value, ttlMs){
+  _memCache.set(key, { exp: Date.now() + ttlMs, value });
+}
+function cacheDrop(prefix){
+  for (const k of _memCache.keys()){
+    if (String(k).startsWith(prefix)) _memCache.delete(k);
+  }
+}
+
+/* =========================================================
+   Local write queue (write-behind)
+========================================================= */
+const SYNC_KEY = "hb_sync_queue_v1";
+let _syncing = false;
+
+function _loadQueue(){
+  try { return JSON.parse(localStorage.getItem(SYNC_KEY) || "[]"); }
+  catch { return []; }
+}
+function _saveQueue(q){
+  localStorage.setItem(SYNC_KEY, JSON.stringify(q));
+}
+function queueSize(){
+  return _loadQueue().length;
+}
+function _emitSync(status){
+  window.dispatchEvent(new CustomEvent("hb:sync", { detail: status }));
+}
+
+function enqueue(action, payload){
+  const q = _loadQueue();
+  q.push({
+    jid: (crypto?.randomUUID ? crypto.randomUUID() : ("jid_"+Date.now()+"_"+Math.random())),
+    action,
+    payload,
+    ts: Date.now()
+  });
+  _saveQueue(q);
+  _emitSync({ syncing: _syncing, queued: q.length });
+  processQueue().catch(()=>{});
+}
+
+async function processQueue(){
+  if (_syncing) return;
+  _syncing = true;
+  _emitSync({ syncing: true, queued: queueSize() });
+
+  try{
+    while(true){
+      const q = _loadQueue();
+      if (!q.length) break;
+
+      const job = q[0];
+      const r = await apiJsonp(job.action, job.payload, { timeoutMs: 20000 });
+
+      if (!r || !r.ok){
+        // stop; keep queue; retry later
+        throw new Error(r?.error || "Falha ao sincronizar");
+      }
+
+      // On any write success, drop caches that depend on it
+      // (backend also caches; this keeps UI consistent)
+      cacheDrop("today:");
+      cacheDrop("lookups:");
+
+      q.shift();
+      _saveQueue(q);
+      _emitSync({ syncing: true, queued: q.length });
+    }
+  } finally {
+    _syncing = false;
+    _emitSync({ syncing: false, queued: queueSize() });
+  }
+}
+
+window.addEventListener("online", ()=> processQueue().catch(()=>{}));
+
+/* =========================================================
+   Convenience wrappers (keep your existing naming)
+========================================================= */
+function apiHealthz(){ return apiJsonp("healthz", {}); }
+function apiVersion(){ return apiJsonp("version", {}); }
+
+async function apiGetLookupsCached(){
+  const k = "lookups:v1";
+  const hit = cacheGet(k);
+  if (hit) return hit;
+  const r = await apiJsonp("getLookups", {});
+  if (r && r.ok) cachePut(k, r, 30_000);
+  return r;
+}
+
+async function apiGetTodayCached(dateIso = todayISO()){
+  const k = "today:"+dateIso;
+  const hit = cacheGet(k);
+  if (hit) return hit;
+  const r = await apiJsonp("getToday", { date: dateIso });
+  if (r && r.ok) cachePut(k, r, 10_000);
+  return r;
 }
 
 function qs(name){
@@ -106,3 +220,12 @@ function calcAgeFromBirth(birthIso){
   if (years < 0) return "";
   return `${years}a ${months}m`;
 }
+
+/* expose helpers you’ll use elsewhere */
+window.CONFIG = CONFIG;
+window.apiJsonp = apiJsonp;
+window.enqueue = enqueue;
+window.processQueue = processQueue;
+window.queueSize = queueSize;
+window.apiGetLookupsCached = apiGetLookupsCached;
+window.apiGetTodayCached = apiGetTodayCached;
