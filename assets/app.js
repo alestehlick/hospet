@@ -3,6 +3,7 @@
    ========================================================= */
 
 const CONFIG = {
+  // MUST be the SAME deployment as the backend code above
   API_URL: "https://script.google.com/macros/s/AKfycbxWN-dz9zvcI0sxYuNT0mFAmn3kSR0kGTTzD2THneTlfsVgD1uTjC8SMneffSOZPyVqlw/exec",
 };
 
@@ -36,40 +37,66 @@ function formatMoney(n){
   return v.toFixed(2).replace(".", ",");
 }
 
+// UTF-8 safe base64 (no unescape/encodeURIComponent issues)
+function b64utf8(obj){
+  const json = JSON.stringify(obj ?? {});
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+
 function apiJsonp(action, payload = {}){
   return new Promise((resolve, reject)=>{
     if (!CONFIG.API_URL) return reject(new Error("CONFIG.API_URL não configurado."));
 
     const cb = "cb_" + Math.random().toString(36).slice(2);
-    window[cb] = (resp)=>{ cleanup(); resolve(resp); };
+    let finished = false;
 
-    // base64 payload
-    const dataB64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    window[cb] = (resp)=>{
+      finished = true;
+      cleanup();
+      resolve(resp);
+    };
 
     const url = new URL(CONFIG.API_URL);
     url.searchParams.set("action", action);
     url.searchParams.set("callback", cb);
-    url.searchParams.set("data", dataB64);
-
-    // IMPORTANT: cache buster (prevents cached JSONP responses)
-    url.searchParams.set("_", Date.now().toString());
+    url.searchParams.set("data", b64utf8(payload));
+    url.searchParams.set("_", Date.now().toString()); // cache buster
 
     const script = document.createElement("script");
     script.src = url.toString();
     script.async = true;
-    script.onerror = ()=>{ cleanup(); reject(new Error("JSONP request failed (deploy / network).")); };
+
+    const t = setTimeout(()=>{
+      if (finished) return;
+      cleanup();
+      reject(new Error("JSONP timeout."));
+    }, 15000);
+
+    script.onerror = ()=>{
+      if (finished) return;
+      cleanup();
+      reject(new Error("JSONP request failed (deploy / network)."));
+    };
+
     document.body.appendChild(script);
 
     function cleanup(){
+      clearTimeout(t);
       try{ delete window[cb]; }catch(_){}
       if (script && script.parentNode) script.parentNode.removeChild(script);
     }
   });
 }
 
-// Optional: health check helper (works because backend now supports JSONP for healthz)
-function apiHealthz(){
-  return apiJsonp("healthz", {});
+// Convenience wrappers that MATCH backend payload keys exactly:
+function apiHealthz(){ return apiJsonp("healthz", {}); }
+function apiVersion(){ return apiJsonp("version", {}); }
+function apiGetToday(dateIso = todayISO()){ return apiJsonp("gettoday", { date: dateIso }); }
+function apiGenerateAgenda(startDate = todayISO(), days = 7){
+  return apiJsonp("generatefromregular", { startDate, days });
 }
 
 function qs(name){
