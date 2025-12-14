@@ -1,32 +1,11 @@
-const $ = (id) => document.getElementById(id);
+/* =========================================================
+   Home (Agenda)
+   ========================================================= */
 
-function setAlert(msg){ $("alerts").innerHTML = `<div class="alert">${escapeHtml(msg)}</div>`; }
-function clearAlert(){ $("alerts").innerHTML = ""; }
+let _searchTimer = null;
 
-function labelTipo(type){
-  return ({
-    creche:"Creche",
-    diaria:"Diária (hotel)",
-    banho:"Banho",
-    tosa_higienica:"Tosa higiênica",
-    transporte:"Transporte",
-    outro:"Outro"
-  })[type] || type;
-}
-
-function eventBg(ev){
-  if (ev.operStatus === "concluido") return (ev.kind==="task" ? "bg-okTask" : "bg-ok");
-  if (ev.operStatus === "cancelado") return "bg-transOpen";
-
-  if (ev.kind==="task") return "bg-taskOpen";
-  switch(ev.type){
-    case "banho": return "bg-bathOpen";
-    case "tosa_higienica": return "bg-hygOpen";
-    case "transporte": return "bg-transOpen";
-    case "diaria": return "bg-hotelOpen";
-    case "creche": return "bg-daycareOpen";
-    default: return "bg-otherOpen";
-  }
+function setApiStatus(msg){
+  $("apiStatus").textContent = msg || "";
 }
 
 function defaultPrice(type){
@@ -34,102 +13,81 @@ function defaultPrice(type){
   return map[type] ?? 0;
 }
 
-function openDialog(id){ $(id).showModal(); }
-function closeDialog(id){ $(id).close(); }
-
-async function loadLookups(){
-  const r = await apiJsonp("getLookups", {});
-  if (!r.ok) throw new Error(r.error || "Falha em getLookups.");
-  fillDogs(r.dogs || []);
-  fillCustomers(r.customers || []);
+function labelTipoServico(type){
+  const map = {
+    creche: "Creche",
+    diaria: "Diária (hotel)",
+    banho: "Banho",
+    tosa_higienica: "Tosa higiênica",
+    transporte: "Transporte",
+    outro: "Outro",
+  };
+  return map[type] || type;
 }
 
-function fillDogs(dogs){
-  const sel = $("svcDog");
-  sel.innerHTML = "";
-  for (const d of dogs){
-    const opt = document.createElement("option");
-    opt.value = d.id;
-    opt.textContent = `${d.name}${d.customerName ? " (Tutor: "+d.customerName+")" : ""}`;
-    sel.appendChild(opt);
+function eventBgClass(ev){
+  if (ev.kind === "task") {
+    if (ev.operStatus === "concluido") return "bg-okTask stripe";
+    return "bg-taskOpen stripe";
+  }
+  if (ev.operStatus === "concluido") return "bg-ok";
+  switch(ev.type){
+    case "banho": return "bg-bathOpen";
+    case "tosa_higienica": return "bg-hygOpen";
+    case "transporte": return "bg-transOpen";
+    case "diaria": return "bg-hotelOpen";
+    case "creche": return "bg-daycareOpen";
+    case "outro": return "bg-otherOpen";
+    default: return "bg-otherOpen";
   }
 }
 
-function fillCustomers(customers){
-  const sel = $("dogCustomer");
-  sel.innerHTML = "";
-  for (const c of customers){
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = c.name;
-    sel.appendChild(opt);
-  }
-}
-
-function renderEvents(events){
+function renderEvents(list){
   const root = $("eventsList");
   root.innerHTML = "";
 
-  if (!events.length){
+  if (!list.length){
     root.innerHTML = `<div class="event"><div class="event__title">Nenhum evento para hoje.</div></div>`;
     return;
   }
 
-  for (const ev of events){
-    const bg = eventBg(ev);
-    const time = ev.kind==="service"
-      ? (ev.startTime ? `${ev.startTime}${ev.endTime? "–"+ev.endTime:""}` : "")
-      : (ev.time || "");
-
-    const title = ev.kind==="task"
+  for (const ev of list){
+    const bg = eventBgClass(ev);
+    const time = ev.startTime ? `${ev.startTime}${ev.endTime ? "–"+ev.endTime : ""}` : "";
+    const title = ev.kind === "task"
       ? ev.title
-      : `${labelTipo(ev.type)} — ${ev.dogName || "Cachorro"}`;
+      : `${labelTipoServico(ev.type)} — ${ev.dogName || "Cachorro"}`;
 
-    const meta = ev.kind==="task"
-      ? `${ev.date}${time ? " • "+time : ""}`
-      : `${ev.date}${time ? " • "+time : ""}${ev.customerName ? " • "+ev.customerName : ""}`;
+    const meta = ev.kind === "task"
+      ? `${ev.date || ""}${ev.time ? " • "+ev.time : ""}`
+      : `${ev.date || ""}${time ? " • "+time : ""}${ev.customerName ? " • "+ev.customerName : ""}${ev.source==="regular" ? " • Regular" : ""}`;
 
-    const statusTxt =
-      ev.operStatus === "concluido" ? "Concluído" :
-      ev.operStatus === "cancelado" ? "Cancelado" : "Em aberto";
+    const statusTxt = ev.operStatus === "concluido" ? "Concluído" : "Em aberto";
 
     const el = document.createElement("div");
     el.className = `event ${bg}`;
     el.innerHTML = `
-      <button class="iconX" title="Excluir">×</button>
+      <button class="iconX" title="Excluir" aria-label="Excluir">×</button>
       <div class="event__title">${escapeHtml(title)}</div>
       <div class="event__meta">${escapeHtml(meta)}</div>
-      <div class="badges">
+      <div class="event__badges">
         <span class="badge">${escapeHtml(statusTxt)}</span>
-        ${ev.kind==="service" ? `<span class="badge">${escapeHtml(moneyBR(ev.price||0))}</span>` : ""}
-        ${ev.kind==="service" ? `<span class="badge"><a href="dog.html?id=${encodeURIComponent(ev.dogId)}">Abrir cachorro</a></span>` : ""}
-        ${ev.kind==="service" ? `<span class="badge"><a href="customer.html?id=${encodeURIComponent(ev.customerId)}">Abrir cliente</a></span>` : ""}
+        ${ev.kind === "service" ? `<span class="badge">R$ ${formatMoney(ev.price || 0)}</span>` : ""}
       </div>
-      <div class="actions">
-        <button class="btn btn--ghost btnToggle"></button>
-        <button class="btn btn--ghost btnCancel">${ev.operStatus==="cancelado" ? "Reabrir" : "Cancelar"}</button>
+      <div class="event__actions">
+        <button class="btn btn--ghost btnToggle">${ev.operStatus === "concluido" ? "Reabrir" : "Marcar como concluído"}</button>
       </div>
     `;
 
-    el.querySelector(".btnToggle").textContent =
-      ev.operStatus==="concluido" ? "Reabrir" : "Marcar como concluído";
-
-    el.querySelector(".iconX").addEventListener("click", async () => {
+    el.querySelector(".iconX").addEventListener("click", async ()=>{
       if (!confirm("Excluir este evento?")) return;
       const r = await apiJsonp("deleteEvent", { id: ev.id, kind: ev.kind });
       if (!r.ok) return alert(r.error || "Falha ao excluir.");
       await loadToday();
     });
 
-    el.querySelector(".btnToggle").addEventListener("click", async () => {
-      const next = (ev.operStatus==="concluido") ? "aberto" : "concluido";
-      const r = await apiJsonp("setEventStatus", { id: ev.id, kind: ev.kind, operStatus: next });
-      if (!r.ok) return alert(r.error || "Falha ao atualizar.");
-      await loadToday();
-    });
-
-    el.querySelector(".btnCancel").addEventListener("click", async () => {
-      const next = (ev.operStatus==="cancelado") ? "aberto" : "cancelado";
+    el.querySelector(".btnToggle").addEventListener("click", async ()=>{
+      const next = ev.operStatus === "concluido" ? "aberto" : "concluido";
       const r = await apiJsonp("setEventStatus", { id: ev.id, kind: ev.kind, operStatus: next });
       if (!r.ok) return alert(r.error || "Falha ao atualizar.");
       await loadToday();
@@ -139,46 +97,190 @@ function renderEvents(events){
   }
 }
 
+/* ---------- Lookups ---------- */
+async function loadLookups(){
+  const r = await apiJsonp("getLookups", {});
+  if (!r.ok) throw new Error(r.error || "Falha ao carregar listas.");
+
+  const dogs = r.dogs || [];
+  const customers = r.customers || [];
+
+  // service dog select
+  const selDog = $("svcDog");
+  selDog.innerHTML = "";
+  dogs.forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d.id;
+    opt.textContent = d.name + (d.customerName ? ` (Tutor: ${d.customerName})` : "");
+    selDog.appendChild(opt);
+  });
+
+  // dog customer select
+  const selCust = $("dogCustomer");
+  selCust.innerHTML = "";
+  customers.forEach(c=>{
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.name;
+    selCust.appendChild(opt);
+  });
+}
+
+/* ---------- Today ---------- */
 async function loadToday(){
-  clearAlert();
   const date = todayISO();
   $("todayTitle").textContent = `Hoje — ${formatDatePt(date)}`;
+
   const r = await apiJsonp("getToday", { date });
-  if (!r.ok) throw new Error(r.error || "Falha em getToday.");
+  if (!r.ok) throw new Error(r.error || "Falha ao carregar agenda.");
   renderEvents(r.events || []);
+}
+
+/* ---------- Autocomplete ---------- */
+function hideSuggest(){
+  const box = $("searchSuggest");
+  box.hidden = true;
+  box.innerHTML = "";
+}
+
+function showSuggest(items){
+  const box = $("searchSuggest");
+  if (!items.length){ hideSuggest(); return; }
+  box.hidden = false;
+  box.innerHTML = items.map(it => `
+    <div class="row" data-kind="${it.kind}" data-id="${it.id}">
+      <div>
+        <div class="name">${escapeHtml(it.name)}</div>
+        <div class="meta">${escapeHtml(it.meta || "")}</div>
+      </div>
+      <div class="kind">${escapeHtml(it.kindLabel)}</div>
+    </div>
+  `).join("");
+
+  box.querySelectorAll(".row").forEach(row=>{
+    row.addEventListener("click", ()=>{
+      const kind = row.getAttribute("data-kind");
+      const id = row.getAttribute("data-id");
+      hideSuggest();
+      if (kind === "dog") window.open(`dog.html?id=${encodeURIComponent(id)}`, "_blank");
+      if (kind === "customer") window.open(`customer.html?id=${encodeURIComponent(id)}`, "_blank");
+    });
+  });
+}
+
+async function refreshSuggest(){
+  const q = $("searchInput").value.trim();
+  if (q.length < 2){ hideSuggest(); return; }
+
+  const r = await apiJsonp("search", { q });
+  if (!r.ok) throw new Error(r.error || "Falha na busca.");
+
+  const dogs = (r.dogs || []).slice(0,8).map(d => ({
+    kind:"dog", kindLabel:"Cachorro",
+    id:d.id, name:d.name,
+    meta: d.customerName ? `Tutor: ${d.customerName}` : ""
+  }));
+
+  const customers = (r.customers || []).slice(0,8).map(c => ({
+    kind:"customer", kindLabel:"Cliente",
+    id:c.id, name:c.name,
+    meta: c.whatsapp ? `WhatsApp: ${c.whatsapp}` : ""
+  }));
+
+  showSuggest([...dogs, ...customers]);
 }
 
 async function runSearch(){
   const q = $("searchInput").value.trim();
   if (!q) return;
   const r = await apiJsonp("search", { q });
-  if (!r.ok) throw new Error(r.error || "Falha na busca.");
+  if (!r.ok) return alert(r.error || "Falha na busca.");
 
   const dogs = r.dogs || [];
   const customers = r.customers || [];
-
-  // wholesome UX: if exact single match, open it; else prompt list
-  if (dogs.length===1 && customers.length===0){
+  if (dogs.length === 1 && customers.length === 0){
     window.open(`dog.html?id=${encodeURIComponent(dogs[0].id)}`, "_blank");
     return;
   }
-  if (customers.length===1 && dogs.length===0){
+  if (customers.length === 1 && dogs.length === 0){
     window.open(`customer.html?id=${encodeURIComponent(customers[0].id)}`, "_blank");
     return;
   }
-
-  const lines = [];
-  if (dogs.length) lines.push("Cachorros:\n" + dogs.map(d => `• ${d.name} (Tutor: ${d.customerName||"-"}) — dog.html?id=${d.id}`).join("\n"));
-  if (customers.length) lines.push("Clientes:\n" + customers.map(c => `• ${c.name} — customer.html?id=${c.id}`).join("\n"));
-  alert(lines.length ? lines.join("\n\n") : "Nada encontrado.");
+  alert("Use as sugestões da busca para abrir a ficha.");
 }
 
+/* ---------- Weekdays UI ---------- */
+function renderWeekdays(containerId, group){
+  const root = $(containerId);
+  root.className = "weekdays";
+  const days = [
+    {n:1, t:"Seg"}, {n:2, t:"Ter"}, {n:3, t:"Qua"},
+    {n:4, t:"Qui"}, {n:5, t:"Sex"}, {n:6, t:"Sáb"}, {n:7, t:"Dom"},
+  ];
+  root.innerHTML = days.map(d => `
+    <label><input type="checkbox" data-wd="${d.n}" data-group="${group}"/> ${d.t}</label>
+  `).join("");
+}
+
+function getSelectedWeekdays(group){
+  const boxes = document.querySelectorAll(`input[type="checkbox"][data-group="${group}"]`);
+  const nums = [];
+  boxes.forEach(b=>{ if (b.checked) nums.push(Number(b.getAttribute("data-wd"))); });
+  return nums.join(",");
+}
+
+function clearWeekdays(group){
+  document.querySelectorAll(`input[type="checkbox"][data-group="${group}"]`).forEach(b=> b.checked = false);
+}
+
+/* ---------- Dialog helpers ---------- */
+function openDialog(id){ $(id).showModal(); }
+function closeDialog(id){ $(id).close(); }
+
+/* ---------- Wiring ---------- */
 function wire(){
-  document.querySelectorAll("[data-close]").forEach(btn=>{
-    btn.addEventListener("click", ()=> closeDialog(btn.getAttribute("data-close")));
+  // cancel
+  document.querySelectorAll(".btnCancel").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const dlg = btn.closest("dialog");
+      if (dlg) dlg.close();
+    });
   });
 
+  // init weekday widgets
+  renderWeekdays("rgCrecheDays", "creche");
+  renderWeekdays("rgTransDays", "transporte");
+
+  // autocomplete events
+  document.addEventListener("click", (e)=>{
+    if (!e.target.closest(".searchWrap")) hideSuggest();
+  });
+
+  $("searchInput").addEventListener("input", ()=>{
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(()=>{ refreshSuggest().catch(()=>{}); }, 180);
+  });
+
+  $("searchInput").addEventListener("keydown", (e)=>{
+    if (e.key === "Escape") hideSuggest();
+    if (e.key === "Enter") runSearch().catch(()=>{});
+  });
+
+  $("searchBtn").addEventListener("click", ()=> runSearch().catch(()=>{}));
+
   $("btnRefresh").addEventListener("click", ()=> boot());
+
+  $("btnGenerate").addEventListener("click", async ()=>{
+    try{
+      const dateFrom = todayISO();
+      const r = await apiJsonp("generateFromRegular", { dateFrom, days: 14 });
+      if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
+      alert(`Agenda gerada: ${r.created} serviços (janela ${r.window.dateFrom} → ${r.window.dateTo})`);
+      await loadToday();
+    }catch(err){
+      alert(err.message || String(err));
+    }
+  });
 
   $("btnNewService").addEventListener("click", ()=>{
     $("svcType").value = "creche";
@@ -198,12 +300,13 @@ function wire(){
     e.preventDefault();
     const payload = {
       type: $("svcType").value,
-      dogId: $("svcDog").value,
       date: $("svcDate").value,
       startTime: $("svcStart").value,
       endTime: $("svcEnd").value,
-      price: Number($("svcPrice").value||0),
-      notes: $("svcNotes").value
+      price: Number($("svcPrice").value || 0),
+      dogId: $("svcDog").value,
+      notes: $("svcNotes").value,
+      source: "manual",
     };
     if (!payload.date || !payload.dogId) return alert("Preencha data e cachorro.");
     const r = await apiJsonp("addService", payload);
@@ -222,7 +325,12 @@ function wire(){
 
   $("taskForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
-    const payload = { title:$("taskTitle").value.trim(), date:$("taskDate").value, time:$("taskTime").value, desc:$("taskDesc").value };
+    const payload = {
+      title: $("taskTitle").value.trim(),
+      date: $("taskDate").value,
+      time: $("taskTime").value,
+      desc: $("taskDesc").value,
+    };
     if (!payload.title) return alert("Título é obrigatório.");
     const r = await apiJsonp("addTask", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar tarefa.");
@@ -235,97 +343,123 @@ function wire(){
     $("custWhatsapp").value = "";
     $("custEmail").value = "";
     $("custAddress").value = "";
-    $("custNotes").value = "";
+    $("custCreditCreche").value = 0;
+    $("custCreditTransp").value = 0;
+    $("custCreditBanho").value = 0;
     openDialog("customerDialog");
   });
 
   $("customerForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
     const payload = {
-      name:$("custName").value.trim(),
-      whatsapp:$("custWhatsapp").value.trim(),
-      email:$("custEmail").value.trim(),
-      address:$("custAddress").value.trim(),
-      notes:$("custNotes").value.trim()
+      name: $("custName").value.trim(),
+      whatsapp: $("custWhatsapp").value.trim(),
+      email: $("custEmail").value.trim(),
+      address: $("custAddress").value.trim(),
+      creditCreche: Number($("custCreditCreche").value || 0),
+      creditTransp: Number($("custCreditTransp").value || 0),
+      creditBanho: Number($("custCreditBanho").value || 0),
     };
     if (!payload.name) return alert("Nome é obrigatório.");
     const r = await apiJsonp("addCustomer", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar cliente.");
     closeDialog("customerDialog");
     await loadLookups();
-    await loadToday();
   });
 
   $("btnNewDog").addEventListener("click", ()=>{
-    ["dogName","dogBreed","dogPhotoUrl","dogDiet","dogTemper","dogVaccines","dogParasite","dogHealth","dogMeds","dogAllergies","dogEmergencyName","dogEmergencyPhone","dogVetName","dogVetPhone","dogNotes"]
-      .forEach(id => $(id).value = "");
-    $("dogAgeYears").value = 0;
-    $("dogAgeMonths").value = 0;
-    $("dogSex").value = "";
-    $("dogNeutered").value = "";
-    $("dogWeight").value = "";
+    $("dogName").value = "";
+    $("dogBreed").value = "";
+    $("dogBirthDate").value = "";
+    $("dogAgeDisplay").value = "";
+    $("dogPhotoUrl").value = "";
+    $("dogDiet").value = "";
+    $("dogTemper").value = "";
+    $("dogVaccines").value = "";
+    $("dogHealth").value = "";
+    $("dogNotes").value = "";
+    clearWeekdays("creche");
+    clearWeekdays("transporte");
     openDialog("dogDialog");
+  });
+
+  $("dogBirthDate").addEventListener("change", ()=>{
+    $("dogAgeDisplay").value = calcAgeFromBirth($("dogBirthDate").value);
   });
 
   $("dogForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
     const payload = {
-      name:$("dogName").value.trim(),
-      breed:$("dogBreed").value.trim(),
-      ageYears:Number($("dogAgeYears").value||0),
-      ageMonths:Number($("dogAgeMonths").value||0),
-      sex:$("dogSex").value,
-      neutered:$("dogNeutered").value,
-      weightKg:Number($("dogWeight").value||0),
-      customerId:$("dogCustomer").value,
-      photoUrl:$("dogPhotoUrl").value.trim(),
-      diet:$("dogDiet").value,
-      temperament:$("dogTemper").value,
-      vaccines:$("dogVaccines").value,
-      parasiteControl:$("dogParasite").value,
-      health:$("dogHealth").value,
-      meds:$("dogMeds").value,
-      allergies:$("dogAllergies").value,
-      emergencyName:$("dogEmergencyName").value,
-      emergencyPhone:$("dogEmergencyPhone").value,
-      vetName:$("dogVetName").value,
-      vetPhone:$("dogVetPhone").value,
-      notes:$("dogNotes").value
+      name: $("dogName").value.trim(),
+      breed: $("dogBreed").value.trim(),
+      birthDate: $("dogBirthDate").value,
+      customerId: $("dogCustomer").value,
+      photoUrl: $("dogPhotoUrl").value.trim(),
+      diet: $("dogDiet").value,
+      temperament: $("dogTemper").value,
+      vaccines: $("dogVaccines").value,
+      health: $("dogHealth").value,
+      notes: $("dogNotes").value,
     };
     if (!payload.name || !payload.customerId) return alert("Nome e cliente são obrigatórios.");
+
     const r = await apiJsonp("addDog", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar cachorro.");
+
+    const dogId = r.id;
+
+    // Regular services if selected
+    const crecheW = getSelectedWeekdays("creche");
+    if (crecheW){
+      const rr = await apiJsonp("addRegularService", {
+        dogId,
+        type: "creche",
+        weekdays: crecheW,
+        startTime: "",
+        endTime: "",
+        price: defaultPrice("creche"),
+        notes: "Regular (criado no cadastro)"
+      });
+      if (!rr.ok) return alert(rr.error || "Falha ao salvar regular (creche).");
+    }
+
+    const transW = getSelectedWeekdays("transporte");
+    if (transW){
+      const rr = await apiJsonp("addRegularService", {
+        dogId,
+        type: "transporte",
+        weekdays: transW,
+        startTime: "",
+        endTime: "",
+        price: defaultPrice("transporte"),
+        notes: "Regular (criado no cadastro)"
+      });
+      if (!rr.ok) return alert(rr.error || "Falha ao salvar regular (transporte).");
+    }
+
     closeDialog("dogDialog");
     await loadLookups();
-    await loadToday();
-  });
-
-  $("searchBtn").addEventListener("click", async ()=> { try{ await runSearch(); }catch(err){ alert(err.message); } });
-  $("searchInput").addEventListener("keydown", async (e)=>{ if(e.key==="Enter"){ e.preventDefault(); try{ await runSearch(); }catch(err){ alert(err.message); } } });
-
-  $("btnGenerate").addEventListener("click", async ()=>{
-    const dateFrom = todayISO();
-    const r = await apiJsonp("generateFromRegular", { dateFrom, days:14 });
-    if (!r.ok) return alert(r.error || "Falha ao gerar agenda.");
-    alert(`Agenda gerada.\nCriados: ${r.created}\nIgnorados (já existiam): ${r.skipped}`);
     await loadToday();
   });
 }
 
 async function boot(){
   try{
-    if (!window.CONFIG?.API_URL || window.CONFIG.API_URL.includes("PASTE")) {
-      setAlert("Configure assets/config.js com a URL /exec do seu Apps Script.");
-      return;
-    }
+    setApiStatus("Conectando…");
+    const ping = await apiJsonp("ping", {});
+    if (!ping.ok) throw new Error(ping.error || "API offline.");
+    setApiStatus("API OK");
+
     await loadLookups();
     await loadToday();
   }catch(err){
     console.error(err);
-    setAlert(err.message || String(err));
+    setApiStatus("API com erro");
+    alert(err.message || String(err));
   }
 }
 
-wire();
-boot();
-
+(function init(){
+  wire();
+  boot();
+})();
