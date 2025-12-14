@@ -3,7 +3,6 @@
    ========================================================= */
 
 const CONFIG = {
-  // MUST be the SAME deployment as the backend code
   API_URL: "https://script.google.com/macros/s/AKfycbxWN-dz9zvcI0sxYuNT0mFAmn3kSR0kGTTzD2THneTlfsVgD1uTjC8SMneffSOZPyVqlw/exec",
 };
 
@@ -63,7 +62,7 @@ function apiJsonp(action, payload = {}){
     url.searchParams.set("action", action);
     url.searchParams.set("callback", cb);
     url.searchParams.set("data", b64utf8(payload));
-    url.searchParams.set("_", Date.now().toString()); // cache buster
+    url.searchParams.set("_", Date.now().toString());
 
     const script = document.createElement("script");
     script.src = url.toString();
@@ -91,16 +90,6 @@ function apiJsonp(action, payload = {}){
   });
 }
 
-/* ---- wrappers (opcional, mas deixam tudo consistente) ---- */
-function apiHealthz(){ return apiJsonp("healthz", {}); }
-function apiVersion(){ return apiJsonp("version", {}); }
-function apiPing(){ return apiJsonp("ping", {}); }
-function apiGetLookups(){ return apiJsonp("getlookups", {}); }
-function apiGetToday(dateIso = todayISO()){ return apiJsonp("gettoday", { date: dateIso }); }
-function apiGenerateAgenda(startDate = todayISO(), days = 7){
-  return apiJsonp("generatefromregular", { startDate, days });
-}
-
 function qs(name){
   const u = new URL(window.location.href);
   return u.searchParams.get(name);
@@ -117,6 +106,3 @@ function calcAgeFromBirth(birthIso){
   if (years < 0) return "";
   return `${years}a ${months}m`;
 }
-
-/* expose same CONFIG (don’t duplicate it) */
-window.CONFIG = CONFIG;
