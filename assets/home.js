@@ -1,8 +1,12 @@
 /* =========================================================
-   Home (Agenda)
+   Home (Agenda) — Fast UI
+   - optimistic UI for toggle/delete
+   - write-behind queue
+   - avoids full reload after every click
    ========================================================= */
 
 let _searchTimer = null;
+let _events = []; // local state for fast UI updates
 
 function setApiStatus(msg){
   $("apiStatus").textContent = msg || "";
@@ -42,64 +46,102 @@ function eventBgClass(ev){
   }
 }
 
+function sortEvents(list){
+  return list.slice().sort((a, b) =>
+    String(a.startTime || a.time || "99:99").localeCompare(String(b.startTime || b.time || "99:99"))
+  );
+}
+
 function renderEvents(list){
+  _events = sortEvents(list || []);
   const root = $("eventsList");
   root.innerHTML = "";
 
-  if (!list.length){
+  if (!_events.length){
     root.innerHTML = `<div class="event"><div class="event__title">Nenhum evento para hoje.</div></div>`;
     return;
   }
 
-  for (const ev of list){
-    const bg = eventBgClass(ev);
-    const time = ev.startTime ? `${ev.startTime}${ev.endTime ? "–"+ev.endTime : ""}` : "";
-    const title = ev.kind === "task"
-      ? ev.title
-      : `${labelTipoServico(ev.type)} — ${ev.dogName || "Cachorro"}`;
-
-    const meta = ev.kind === "task"
-      ? `${ev.date || ""}${ev.time ? " • "+ev.time : ""}`
-      : `${ev.date || ""}${time ? " • "+time : ""}${ev.customerName ? " • "+ev.customerName : ""}${ev.source==="regular" ? " • Regular" : ""}`;
-
-    const statusTxt = ev.operStatus === "concluido" ? "Concluído" : "Em aberto";
-
-    const el = document.createElement("div");
-    el.className = `event ${bg}`;
-    el.innerHTML = `
-      <button class="iconX" title="Excluir" aria-label="Excluir">×</button>
-      <div class="event__title">${escapeHtml(title)}</div>
-      <div class="event__meta">${escapeHtml(meta)}</div>
-      <div class="event__badges">
-        <span class="badge">${escapeHtml(statusTxt)}</span>
-        ${ev.kind === "service" ? `<span class="badge">R$ ${formatMoney(ev.price || 0)}</span>` : ""}
-      </div>
-      <div class="event__actions">
-        <button class="btn btn--ghost btnToggle">${ev.operStatus === "concluido" ? "Reabrir" : "Marcar como concluído"}</button>
-      </div>
-    `;
-
-    el.querySelector(".iconX").addEventListener("click", async ()=>{
-      if (!confirm("Excluir este evento?")) return;
-      const r = await apiJsonp("deleteEvent", { id: ev.id, kind: ev.kind });
-      if (!r.ok) return alert(r.error || "Falha ao excluir.");
-      await loadToday();
-    });
-
-    el.querySelector(".btnToggle").addEventListener("click", async ()=>{
-      const next = ev.operStatus === "concluido" ? "aberto" : "concluido";
-      const r = await apiJsonp("setEventStatus", { id: ev.id, kind: ev.kind, operStatus: next });
-      if (!r.ok) return alert(r.error || "Falha ao atualizar.");
-      await loadToday();
-    });
-
-    root.appendChild(el);
+  for (const ev of _events){
+    root.appendChild(renderOneEvent(ev));
   }
+}
+
+function renderOneEvent(ev){
+  const bg = eventBgClass(ev);
+  const time = ev.startTime ? `${ev.startTime}${ev.endTime ? "–"+ev.endTime : ""}` : "";
+  const title = ev.kind === "task"
+    ? ev.title
+    : `${labelTipoServico(ev.type)} — ${ev.dogName || "Cachorro"}`;
+
+  const meta = ev.kind === "task"
+    ? `${ev.date || ""}${ev.time ? " • "+ev.time : ""}`
+    : `${ev.date || ""}${time ? " • "+time : ""}${ev.customerName ? " • "+ev.customerName : ""}${ev.source==="regular" ? " • Regular" : ""}`;
+
+  const statusTxt = ev.operStatus === "concluido" ? "Concluído" : "Em aberto";
+
+  const el = document.createElement("div");
+  el.className = `event ${bg}`;
+  el.dataset.id = ev.id;
+  el.dataset.kind = ev.kind;
+
+  el.innerHTML = `
+    <button class="iconX" title="Excluir" aria-label="Excluir">×</button>
+    <div class="event__title">${escapeHtml(title)}</div>
+    <div class="event__meta">${escapeHtml(meta)}</div>
+    <div class="event__badges">
+      <span class="badge">${escapeHtml(statusTxt)}</span>
+      ${ev.kind === "service" ? `<span class="badge">R$ ${formatMoney(ev.price || 0)}</span>` : ""}
+      <span class="badge" data-sync hidden>Sincronizando…</span>
+    </div>
+    <div class="event__actions">
+      <button class="btn btn--ghost btnToggle">${ev.operStatus === "concluido" ? "Reabrir" : "Marcar como concluído"}</button>
+    </div>
+  `;
+
+  const syncBadge = el.querySelector("[data-sync]");
+
+  // DELETE (optimistic)
+  el.querySelector(".iconX").addEventListener("click", ()=>{
+    if (!confirm("Excluir este evento?")) return;
+
+    // optimistic remove
+    const before = _events.slice();
+    _events = _events.filter(x => !(x.id === ev.id && x.kind === ev.kind));
+    renderEvents(_events);
+
+    // queue write
+    enqueue("deleteEvent", { id: ev.id, kind: ev.kind });
+
+    // if you want: light auto-refresh later (optional)
+    // setTimeout(()=> loadToday({force:true}).catch(()=>{}), 2000);
+  });
+
+  // TOGGLE (optimistic)
+  el.querySelector(".btnToggle").addEventListener("click", ()=>{
+    // update local state first
+    const next = ev.operStatus === "concluido" ? "aberto" : "concluido";
+    ev.operStatus = next;
+
+    // update DOM immediately
+    syncBadge.hidden = false;
+    el.className = `event ${eventBgClass(ev)}`;
+    el.querySelector(".btnToggle").textContent = (next === "concluido") ? "Reabrir" : "Marcar como concluído";
+    el.querySelector(".event__badges .badge").textContent = (next === "concluido") ? "Concluído" : "Em aberto";
+
+    // queue write
+    enqueue("setEventStatus", { id: ev.id, kind: ev.kind, operStatus: next });
+
+    // hide badge after a short time (actual sync may take longer; status also shown top)
+    setTimeout(()=>{ try{ syncBadge.hidden = true; }catch(_){ } }, 1200);
+  });
+
+  return el;
 }
 
 /* ---------- Lookups ---------- */
 async function loadLookups(){
-  const r = await apiJsonp("getLookups", {});
+  const r = await apiGetLookupsCached();
   if (!r.ok) throw new Error(r.error || "Falha ao carregar listas.");
 
   const dogs = r.dogs || [];
@@ -125,11 +167,15 @@ async function loadLookups(){
 }
 
 /* ---------- Today ---------- */
-async function loadToday(){
+async function loadToday({ force = false } = {}){
   const date = todayISO();
   $("todayTitle").textContent = `Hoje — ${formatDatePt(date)}`;
 
-  const r = await apiJsonp("getToday", { date });
+  // force bypass frontend cache if requested
+  let r;
+  if (force) r = await apiJsonp("getToday", { date });
+  else r = await apiGetTodayCached(date);
+
   if (!r.ok) throw new Error(r.error || "Falha ao carregar agenda.");
   renderEvents(r.events || []);
 }
@@ -191,6 +237,7 @@ async function refreshSuggest(){
 async function runSearch(){
   const q = $("searchInput").value.trim();
   if (!q) return;
+
   const r = await apiJsonp("search", { q });
   if (!r.ok) return alert(r.error || "Falha na busca.");
 
@@ -237,6 +284,14 @@ function closeDialog(id){ $(id).close(); }
 
 /* ---------- Wiring ---------- */
 function wire(){
+  // sync status (top right)
+  window.addEventListener("hb:sync", (e)=>{
+    const { syncing, queued } = e.detail || {};
+    if (syncing && queued) setApiStatus(`Sincronizando… (${queued})`);
+    else if (queued) setApiStatus(`Fila pendente (${queued})`);
+    else setApiStatus("API OK");
+  });
+
   document.querySelectorAll(".btnCancel").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const dlg = btn.closest("dialog");
@@ -263,15 +318,16 @@ function wire(){
 
   $("searchBtn").addEventListener("click", ()=> runSearch().catch(()=>{}));
 
-  $("btnRefresh").addEventListener("click", ()=> boot());
+  $("btnRefresh").addEventListener("click", ()=> boot({ forceToday: true }));
 
   $("btnGenerate").addEventListener("click", async ()=>{
     try{
       const startDate = todayISO();
+      // This is a write-heavy operation; still OK to await once
       const r = await apiJsonp("generateFromRegular", { startDate, days: 14 });
       if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
-      alert(`Agenda gerada: ${r.created} serviços (a partir de ${r.startDate} por ${r.days} dias)`);
-      await loadToday();
+      alert(`Agenda gerada: ${r.created} serviços (janela ${r.startDate} → ${r.days} dias)`);
+      await loadToday({ force: true });
     }catch(err){
       alert(err.message || String(err));
     }
@@ -304,10 +360,15 @@ function wire(){
       source: "manual",
     };
     if (!payload.date || !payload.dogId) return alert("Preencha data e cachorro.");
+
+    // await once, but DO NOT full reload unless it’s today
     const r = await apiJsonp("addService", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar serviço.");
+
     closeDialog("serviceDialog");
-    await loadToday();
+
+    // Fast UI: if service is for today, force refresh once; otherwise no need
+    if (payload.date === todayISO()) await loadToday({ force: true });
   });
 
   $("btnNewTask").addEventListener("click", ()=>{
@@ -327,10 +388,12 @@ function wire(){
       desc: $("taskDesc").value,
     };
     if (!payload.title) return alert("Título é obrigatório.");
+
     const r = await apiJsonp("addTask", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar tarefa.");
+
     closeDialog("taskDialog");
-    await loadToday();
+    if (payload.date === todayISO()) await loadToday({ force: true });
   });
 
   $("btnNewCustomer").addEventListener("click", ()=>{
@@ -356,9 +419,13 @@ function wire(){
       creditBanho: Number($("custCreditBanho").value || 0),
     };
     if (!payload.name) return alert("Nome é obrigatório.");
+
     const r = await apiJsonp("addCustomer", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar cliente.");
+
     closeDialog("customerDialog");
+
+    // refresh lookups once (cached + backend cache makes this quick)
     await loadLookups();
   });
 
@@ -400,7 +467,6 @@ function wire(){
 
     const r = await apiJsonp("addDog", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar cachorro.");
-
     const dogId = r.id;
 
     const crecheW = getSelectedWeekdays("creche");
@@ -433,19 +499,26 @@ function wire(){
 
     closeDialog("dogDialog");
     await loadLookups();
-    await loadToday();
+    await loadToday({ force: true });
   });
 }
 
-async function boot(){
+async function boot({ forceToday = false } = {}){
   try{
     setApiStatus("Conectando…");
     const ping = await apiJsonp("ping", {});
     if (!ping.ok) throw new Error(ping.error || "API offline.");
+
+    // Start background sync if queue exists
+    if (queueSize() > 0) processQueue().catch(()=>{});
+
     setApiStatus("API OK");
 
     await loadLookups();
-    await loadToday();
+    await loadToday({ force: forceToday });
+
+    // periodic light refresh (optional): keep homepage fresh without constant reloads
+    setInterval(()=> loadToday().catch(()=>{}), 60_000);
   }catch(err){
     console.error(err);
     setApiStatus("API com erro");
