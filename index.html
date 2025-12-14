@@ -1,1 +1,266 @@
-aa
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Hotel & Banho — Agenda</title>
+  <link rel="stylesheet" href="assets/style.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Hotel & Banho</h1>
+        <div class="sub" id="todayTitle">Hoje</div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn btn--primary" id="btnNewService">Novo serviço</button>
+        <button class="btn" id="btnNewTask">Nova tarefa</button>
+
+        <div class="search">
+          <input id="searchInput" placeholder="Buscar cachorro ou cliente..." />
+          <small class="kbd">Enter</small>
+          <button class="btn" id="searchBtn">Buscar</button>
+        </div>
+
+        <button class="btn" id="btnNewDog">Novo cachorro</button>
+        <button class="btn" id="btnNewCustomer">Novo cliente</button>
+        <button class="btn" id="btnGenerate">Gerar agenda (14 dias)</button>
+        <button class="btn" id="btnRefresh">Atualizar</button>
+      </div>
+    </header>
+
+    <div id="alerts"></div>
+
+    <div class="section-title">Agenda de hoje</div>
+    <div id="eventsList"></div>
+  </div>
+
+  <!-- Service dialog -->
+  <dialog id="serviceDialog">
+    <form class="modal" id="serviceForm">
+      <h2>Novo serviço</h2>
+      <div class="grid">
+        <div>
+          <label>Tipo</label>
+          <select id="svcType">
+            <option value="creche">Creche</option>
+            <option value="diaria">Diária (hotel)</option>
+            <option value="banho">Banho</option>
+            <option value="tosa_higienica">Tosa higiênica</option>
+            <option value="transporte">Transporte</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div>
+          <label>Cachorro</label>
+          <select id="svcDog"></select>
+        </div>
+        <div>
+          <label>Data</label>
+          <input id="svcDate" type="date"/>
+        </div>
+        <div>
+          <label>Preço</label>
+          <input id="svcPrice" type="number" step="0.01"/>
+        </div>
+        <div>
+          <label>Início (opcional)</label>
+          <input id="svcStart" type="time"/>
+        </div>
+        <div>
+          <label>Fim (opcional)</label>
+          <input id="svcEnd" type="time"/>
+        </div>
+        <div class="full">
+          <label>Observações</label>
+          <textarea id="svcNotes"></textarea>
+        </div>
+      </div>
+      <div class="footer">
+        <button type="button" class="btn" data-close="serviceDialog">Cancelar</button>
+        <button type="submit" class="btn btn--primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Task dialog -->
+  <dialog id="taskDialog">
+    <form class="modal" id="taskForm">
+      <h2>Nova tarefa</h2>
+      <div class="grid">
+        <div class="full">
+          <label>Título</label>
+          <input id="taskTitle"/>
+        </div>
+        <div>
+          <label>Data (opcional)</label>
+          <input id="taskDate" type="date"/>
+        </div>
+        <div>
+          <label>Hora (opcional)</label>
+          <input id="taskTime" type="time"/>
+        </div>
+        <div class="full">
+          <label>Descrição</label>
+          <textarea id="taskDesc"></textarea>
+        </div>
+      </div>
+      <div class="footer">
+        <button type="button" class="btn" data-close="taskDialog">Cancelar</button>
+        <button type="submit" class="btn btn--primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Customer dialog -->
+  <dialog id="customerDialog">
+    <form class="modal" id="customerForm">
+      <h2>Novo cliente</h2>
+      <div class="grid">
+        <div class="full">
+          <label>Nome</label>
+          <input id="custName"/>
+        </div>
+        <div>
+          <label>WhatsApp</label>
+          <input id="custWhatsapp"/>
+        </div>
+        <div>
+          <label>Email</label>
+          <input id="custEmail" type="email"/>
+        </div>
+        <div class="full">
+          <label>Endereço</label>
+          <input id="custAddress"/>
+        </div>
+        <div class="full">
+          <label>Notas</label>
+          <textarea id="custNotes"></textarea>
+        </div>
+      </div>
+      <div class="footer">
+        <button type="button" class="btn" data-close="customerDialog">Cancelar</button>
+        <button type="submit" class="btn btn--primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Dog dialog -->
+  <dialog id="dogDialog">
+    <form class="modal" id="dogForm">
+      <h2>Novo cachorro</h2>
+      <div class="grid">
+        <div>
+          <label>Nome</label>
+          <input id="dogName"/>
+        </div>
+        <div>
+          <label>Raça</label>
+          <input id="dogBreed" placeholder="Ex: Spitz Alemão"/>
+        </div>
+        <div>
+          <label>Idade (anos)</label>
+          <input id="dogAgeYears" type="number" min="0"/>
+        </div>
+        <div>
+          <label>Idade (meses)</label>
+          <input id="dogAgeMonths" type="number" min="0" max="11"/>
+        </div>
+
+        <div>
+          <label>Sexo (opcional)</label>
+          <select id="dogSex">
+            <option value="">—</option>
+            <option value="macho">Macho</option>
+            <option value="femea">Fêmea</option>
+          </select>
+        </div>
+        <div>
+          <label>Castrado? (opcional)</label>
+          <select id="dogNeutered">
+            <option value="">—</option>
+            <option value="sim">Sim</option>
+            <option value="nao">Não</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Peso (kg, opcional)</label>
+          <input id="dogWeight" type="number" step="0.1" min="0"/>
+        </div>
+        <div>
+          <label>Cliente</label>
+          <select id="dogCustomer"></select>
+        </div>
+
+        <div class="full">
+          <label>Foto (URL, opcional)</label>
+          <input id="dogPhotoUrl" placeholder="https://...jpg"/>
+        </div>
+
+        <div class="full">
+          <label>Dieta</label>
+          <textarea id="dogDiet"></textarea>
+        </div>
+        <div class="full">
+          <label>Temperamento</label>
+          <textarea id="dogTemper"></textarea>
+        </div>
+        <div class="full">
+          <label>Vacinas</label>
+          <textarea id="dogVaccines"></textarea>
+        </div>
+        <div class="full">
+          <label>Vermífugo/Antiparasitário</label>
+          <textarea id="dogParasite"></textarea>
+        </div>
+        <div class="full">
+          <label>Saúde</label>
+          <textarea id="dogHealth"></textarea>
+        </div>
+        <div class="full">
+          <label>Medicamentos</label>
+          <textarea id="dogMeds"></textarea>
+        </div>
+        <div class="full">
+          <label>Alergias</label>
+          <textarea id="dogAllergies"></textarea>
+        </div>
+
+        <div>
+          <label>Emergência — Nome</label>
+          <input id="dogEmergencyName"/>
+        </div>
+        <div>
+          <label>Emergência — Telefone</label>
+          <input id="dogEmergencyPhone"/>
+        </div>
+
+        <div>
+          <label>Veterinário — Nome</label>
+          <input id="dogVetName"/>
+        </div>
+        <div>
+          <label>Veterinário — Telefone</label>
+          <input id="dogVetPhone"/>
+        </div>
+
+        <div class="full">
+          <label>Notas adicionais</label>
+          <textarea id="dogNotes"></textarea>
+        </div>
+      </div>
+      <div class="footer">
+        <button type="button" class="btn" data-close="dogDialog">Cancelar</button>
+        <button type="submit" class="btn btn--primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="assets/config.js"></script>
+  <script src="assets/api.js"></script>
+  <script src="assets/home.js"></script>
+</body>
+</html>
