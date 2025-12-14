@@ -13,7 +13,10 @@
         <h1 id="title">Cliente</h1>
         <div class="sub" id="subtitle"></div>
       </div>
-      <div class="sub"><a href="index.html">← Voltar</a></div>
+      <div class="sub" style="display:flex; gap:10px; align-items:center;">
+        <button class="btn btn--ghost" id="btnEditCustomer">Editar</button>
+        <a href="index.html">← Voltar</a>
+      </div>
     </div>
 
     <div class="card" id="custCard"></div>
@@ -23,6 +26,50 @@
       <div id="serviceList" class="events"></div>
     </div>
   </div>
+
+  <!-- DIALOG: EDIT CUSTOMER -->
+  <dialog id="customerEditDialog">
+    <div class="section-title">Editar cliente</div>
+    <form id="customerEditForm">
+      <div class="full">
+        <label>Nome</label>
+        <input id="ecName" required/>
+      </div>
+
+      <div>
+        <label>WhatsApp</label>
+        <input id="ecWhatsapp"/>
+      </div>
+
+      <div>
+        <label>Email</label>
+        <input id="ecEmail"/>
+      </div>
+
+      <div class="full">
+        <label>Endereço</label>
+        <input id="ecAddress"/>
+      </div>
+
+      <div>
+        <label>Créditos (creche)</label>
+        <input id="ecCreditCreche" type="number"/>
+      </div>
+      <div>
+        <label>Créditos (transporte)</label>
+        <input id="ecCreditTransp" type="number"/>
+      </div>
+      <div>
+        <label>Créditos (banho)</label>
+        <input id="ecCreditBanho" type="number"/>
+      </div>
+
+      <div class="full" style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="btn btn--ghost" id="btnCancelCustomerEdit">Cancelar</button>
+        <button class="btn btn--big" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="assets/app.js"></script>
   <script src="assets/customer.js"></script>
