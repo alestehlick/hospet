@@ -1,142 +1,88 @@
-const $ = (id)=>document.getElementById(id);
-function setAlert(msg){ $("alerts").innerHTML = `<div class="alert">${escapeHtml(msg)}</div>`; }
-function clearAlert(){ $("alerts").innerHTML = ""; }
-function openDialog(id){ $(id).showModal(); }
-function closeDialog(id){ $(id).close(); }
+function badge(text){ return `<span class="badge">${escapeHtml(text)}</span>`; }
 
-function qs(name){
-  return new URLSearchParams(location.search).get(name);
+function renderDog(d){
+  $("title").textContent = d.name ? `Cachorro — ${d.name}` : "Cachorro";
+  const age = calcAgeFromBirth(d.birthDate || "");
+  $("subtitle").textContent = d.customerName ? `Tutor: ${d.customerName}` : "";
+
+  $("dogCard").innerHTML = `
+    <div class="section-title">Dados</div>
+    <div class="sub">Raça: ${escapeHtml(d.breed || "-")}</div>
+    <div class="sub">Nascimento: ${escapeHtml(d.birthDate || "-")} ${age ? `• Idade: ${age}` : ""}</div>
+    <div class="sub">Foto (URL): ${escapeHtml(d.photoUrl || "-")}</div>
+    <hr class="sep"/>
+    <div class="sub"><b>Dieta:</b> ${escapeHtml(d.diet || "-")}</div>
+    <div class="sub"><b>Temperamento:</b> ${escapeHtml(d.temperament || "-")}</div>
+    <div class="sub"><b>Vacinas:</b> ${escapeHtml(d.vaccines || "-")}</div>
+    <div class="sub"><b>Saúde:</b> ${escapeHtml(d.health || "-")}</div>
+    <div class="sub"><b>Observações:</b> ${escapeHtml(d.notes || "-")}</div>
+  `;
 }
 
-function labelTipo(type){
-  return ({creche:"Creche",diaria:"Diária (hotel)",banho:"Banho",tosa_higienica:"Tosa higiênica",transporte:"Transporte",outro:"Outro"})[type] || type;
-}
-
-function defaultPrice(type){
-  const map = { creche:120, diaria:180, banho:120, tosa_higienica:60, transporte:40, outro:0 };
-  return map[type] ?? 0;
+function labelType(t){
+  const m = { creche:"Creche", diaria:"Diária", banho:"Banho", tosa_higienica:"Tosa higiênica", transporte:"Transporte", outro:"Outro" };
+  return m[t] || t;
 }
 
 function renderRegular(list){
   const root = $("regularList");
   root.innerHTML = "";
   if (!list.length){
-    root.innerHTML = `<div class="alert">Nenhum serviço regular cadastrado.</div>`;
+    root.innerHTML = `<div class="event"><div class="event__title">Nenhum serviço regular.</div></div>`;
     return;
   }
-  for (const r of list){
+  list.forEach(r=>{
     const el = document.createElement("div");
-    el.className = "event";
+    el.className = "event bg-transOpen";
     el.innerHTML = `
-      <div class="event__title">${escapeHtml(labelTipo(r.type))}</div>
-      <div class="event__meta">Dias: ${escapeHtml(String(r.weekdays||""))} ${r.startTime? " • "+escapeHtml(r.startTime):""}${r.endTime? "–"+escapeHtml(r.endTime):""}</div>
-      <div class="badges">
-        <span class="badge">${escapeHtml(moneyBR(r.price||0))}</span>
+      <div class="event__title">${escapeHtml(labelType(r.type))}</div>
+      <div class="event__meta">Dias: ${escapeHtml(r.weekdays || "")} • Ativo: ${escapeHtml(r.active || "")}</div>
+      <div class="event__badges">
+        ${badge(`R$ ${formatMoney(r.price||0)}`)}
+        ${badge(r.notes || "")}
       </div>
     `;
     root.appendChild(el);
-  }
+  });
 }
 
 function renderServices(list){
   const root = $("serviceList");
   root.innerHTML = "";
   if (!list.length){
-    root.innerHTML = `<div class="alert">Nenhum serviço ainda.</div>`;
+    root.innerHTML = `<div class="event"><div class="event__title">Nenhum serviço registrado.</div></div>`;
     return;
   }
-  for (const s of list.slice().reverse()){
+  list.slice().reverse().forEach(s=>{
     const el = document.createElement("div");
-    el.className = "event";
+    el.className = "event bg-bathOpen";
     el.innerHTML = `
-      <div class="event__title">${escapeHtml(labelTipo(s.type))}</div>
-      <div class="event__meta">${escapeHtml(s.date)}${s.startTime? " • "+escapeHtml(s.startTime):""} • ${escapeHtml(s.operStatus||"aberto")}</div>
-      <div class="badges"><span class="badge">${escapeHtml(moneyBR(s.price||0))}</span></div>
+      <div class="event__title">${escapeHtml(labelType(s.type))}</div>
+      <div class="event__meta">${escapeHtml(s.date || "")} ${s.startTime ? "• "+escapeHtml(s.startTime) : ""} ${s.source==="regular" ? "• Regular" : ""}</div>
+      <div class="event__badges">
+        ${badge(`R$ ${formatMoney(s.price||0)}`)}
+        ${badge(s.operStatus || "")}
+      </div>
     `;
     root.appendChild(el);
-  }
-}
-
-function safetyBlock(d){
-  const parts = [];
-  if (d.meds) parts.push("Medicamentos: " + d.meds);
-  if (d.allergies) parts.push("Alergias: " + d.allergies);
-  if (d.health) parts.push("Saúde: " + d.health);
-  if (d.emergencyName || d.emergencyPhone) parts.push(`Emergência: ${d.emergencyName||""} ${d.emergencyPhone||""}`.trim());
-  if (d.vetName || d.vetPhone) parts.push(`Veterinário: ${d.vetName||""} ${d.vetPhone||""}`.trim());
-  if (!parts.length) return `<strong>⚠️ Informações rápidas</strong><div style="color:#666">Nenhum alerta cadastrado.</div>`;
-  return `<strong>⚠️ Informações rápidas</strong><div>${parts.map(escapeHtml).join("<br/>")}</div>`;
+  });
 }
 
 async function boot(){
-  clearAlert();
   const id = qs("id");
-  if (!id) return setAlert("ID do cachorro não informado.");
+  if (!id) return alert("Falta ?id=");
 
-  try{
-    const r = await apiJsonp("getDog", { id });
-    if (!r.ok) throw new Error(r.error || "Falha ao carregar cachorro.");
+  const r1 = await apiJsonp("getDog", { id });
+  if (!r1.ok) return alert(r1.error || "Falha ao carregar cachorro.");
+  renderDog(r1.dog);
 
-    const d = r.dog;
-    document.title = d.name ? `Cachorro — ${d.name}` : "Cachorro";
-    $("title").textContent = d.name || "Cachorro";
+  const r2 = await apiJsonp("listRegularByDog", { dogId: id });
+  if (!r2.ok) return alert(r2.error || "Falha ao carregar regulares.");
+  renderRegular(r2.regular || []);
 
-    const img = $("photo");
-    img.src = d.photoUrl ? d.photoUrl : "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><rect width='100%' height='100%' fill='#fff'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#999' font-family='Arial' font-size='12'>Sem foto</text></svg>`);
-
-    $("dogInfo").innerHTML = `
-      <div><b>Tutor:</b> <a href="customer.html?id=${encodeURIComponent(d.customerId)}">${escapeHtml(d.customerName||"-")}</a></div>
-      <div><b>Raça:</b> ${escapeHtml(d.breed||"-")}</div>
-      <div><b>Idade:</b> ${escapeHtml(String(d.ageYears||0))}a ${escapeHtml(String(d.ageMonths||0))}m</div>
-      <div><b>Sexo:</b> ${escapeHtml(d.sex||"-")} • <b>Castrado:</b> ${escapeHtml(d.neutered||"-")} • <b>Peso:</b> ${escapeHtml(String(d.weightKg||""))}</div>
-      <div><b>Dieta:</b> ${escapeHtml(d.diet||"-")}</div>
-      <div><b>Temperamento:</b> ${escapeHtml(d.temperament||"-")}</div>
-      <div><b>Vacinas:</b> ${escapeHtml(d.vaccines||"-")}</div>
-      <div><b>Antiparasitário:</b> ${escapeHtml(d.parasiteControl||"-")}</div>
-    `;
-
-    $("safety").innerHTML = safetyBlock(d);
-    renderRegular(r.regular || []);
-    renderServices(r.services || []);
-
-    // dialog wiring
-    document.querySelectorAll("[data-close]").forEach(btn=>{
-      btn.addEventListener("click", ()=> closeDialog(btn.getAttribute("data-close")));
-    });
-
-    $("btnAddRegular").addEventListener("click", ()=>{
-      $("rgType").value = "creche";
-      $("rgPrice").value = defaultPrice("creche");
-      $("rgWeekdays").value = "";
-      $("rgStart").value = "";
-      $("rgEnd").value = "";
-      $("rgNotes").value = "";
-      openDialog("regularDialog");
-    });
-
-    $("rgType").addEventListener("change", ()=> $("rgPrice").value = defaultPrice($("rgType").value));
-
-    $("regularForm").addEventListener("submit", async (e)=>{
-      e.preventDefault();
-      const payload = {
-        dogId: id,
-        type: $("rgType").value,
-        weekdays: $("rgWeekdays").value.trim(),
-        startTime: $("rgStart").value,
-        endTime: $("rgEnd").value,
-        price: Number($("rgPrice").value||0),
-        notes: $("rgNotes").value
-      };
-      if (!payload.weekdays) return alert("Informe weekdays, ex: 1,3,5");
-      const rr = await apiJsonp("addRegularService", payload);
-      if (!rr.ok) return alert(rr.error || "Falha ao salvar serviço regular.");
-      closeDialog("regularDialog");
-      boot();
-    });
-
-  }catch(err){
-    setAlert(err.message || String(err));
-  }
+  const r3 = await apiJsonp("getDogServices", { dogId: id });
+  if (!r3.ok) return alert(r3.error || "Falha ao carregar serviços.");
+  renderServices(r3.services || []);
 }
 
-boot();
+boot().catch(e=>alert(e.message||String(e)));
