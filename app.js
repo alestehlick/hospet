@@ -6,7 +6,7 @@
 
 const CONFIG = {
   // Paste your Apps Script Web App URL here:
-  API_URL: "https://script.google.com/macros/s/AKfycbzOY4pOx2Cvjjp3lwCczoPBhdt8ZZClwQYMayajbZDCTuzLnGX7E1RkC7_y2hqOvaGp/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbxu02yArXUWIkZYzy9aZoLsS-7m73pKDRzoxkSPzuPnRATF1J3_DgWxYlE9hMIyf7c2_A/exec",
 };
 
 const $ = (id) => document.getElementById(id);
