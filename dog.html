@@ -86,9 +86,28 @@
         <textarea id="edNotes"></textarea>
       </div>
 
+      <div class="full">
+        <hr class="sep"/>
+        <div class="section-title">Serviços regulares (editar)</div>
+        <div class="alert">
+          Marque os dias em que este cachorro tem <b>creche</b> e/ou <b>transporte</b> regularmente.
+          Ao salvar, a agenda do dia passa a trazer esses serviços automaticamente.
+        </div>
+      </div>
+
+      <div class="full">
+        <label>Creche — dias da semana</label>
+        <div id="edRgCrecheDays"></div>
+      </div>
+
+      <div class="full">
+        <label>Transporte — dias da semana</label>
+        <div id="edRgTransDays"></div>
+      </div>
+
       <div class="full" style="display:flex; gap:10px; justify-content:flex-end;">
         <button type="button" class="btn btn--ghost" id="btnCancelDogEdit">Cancelar</button>
-        <button class="btn btn--big" type="submit">Salvar</button>
+        <button class="btn btn--big" id="btnSaveDogEdit" type="submit">Salvar</button>
       </div>
     </form>
   </dialog>
