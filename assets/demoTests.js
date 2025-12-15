@@ -148,13 +148,14 @@ export function runAllTests({ resetarStorage = true } = {}) {
     statusPagamento: "Não pago",
   }));
 
-  const sTranspSaved = salvar(new TransportationService({
-    dogId: d1Saved.id,
-    tipo: "Para o hotel",
-    data: "18-12-2025",
-    statusConclusao: "Agendado",
-    statusPagamento: "Não pago",
-  }));
+const sTranspSaved = salvar(new TransportationService({
+  dogId: d1Saved.id,
+  direcao: "Para o Hotel",   // <- EXATO
+  data: "18-12-2025",
+  statusConclusao: "Agendado",
+  statusPagamento: "Não pago",
+}));
+
 
   console.log("Serviços salvos:", {
     banho: sBanhoSaved, hig: sHigSaved, creche: sCrecheSaved,
