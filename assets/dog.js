@@ -1,256 +1,122 @@
-let _dog = null;
-let _lookups = null;
-let _regular = []; // cache regular services for checkbox prefill
+// Dog.js — Cão
+//
+// Objetivo:
+// - Estrutura do Dog como você descreveu.
+// - Leis estruturais: um Dog sozinho precisa ter nome, customerId válido, etc.
+// - Não verificamos se customerId existe no "banco" (isso é relacional, fica para depois).
+//
+// Convenções:
+// - dataNascimento é opcional, mas se preenchida deve seguir DD-MM-AAAA.
 
-function badge(text){ return `<span class="badge">${escapeHtml(text)}</span>`; }
+export class Dog {
+  constructor(data = {}) {
+    // id pode ser null por enquanto
+    this.id = data.id ?? null;
 
-function labelType(t){
-  const m = { creche:"Creche", diaria:"Diária", banho:"Banho", tosa_higienica:"Tosa higiênica", transporte:"Transporte", outro:"Outro" };
-  return m[t] || t;
-}
+    // Campos básicos do cão
+    this.nome = data.nome ?? "";
+    this.raca = data.raca ?? "";
 
-function defaultPrice(type){
-  const map = { creche:120, transporte:40 };
-  return map[type] ?? 0;
-}
+    // dataNascimento no formato "DD-MM-AAAA" (opcional)
+    this.dataNascimento = data.dataNascimento ?? "";
 
-function openDialog(id){ $(id).showModal(); }
-function closeDialog(id){ $(id).close(); }
+    // Ligação com tutor: você definiu como obrigatória
+    this.customerId = data.customerId ?? null;
 
-/* ---------- Weekdays UI (edit dialog) ---------- */
-function renderWeekdays(containerId, group){
-  const root = $(containerId);
-  root.className = "weekdays";
-  const days = [
-    {n:1, t:"Seg"}, {n:2, t:"Ter"}, {n:3, t:"Qua"},
-    {n:4, t:"Qui"}, {n:5, t:"Sex"}, {n:6, t:"Sáb"}, {n:7, t:"Dom"},
-  ];
-  root.innerHTML = days.map(d => `
-    <label><input type="checkbox" data-wd="${d.n}" data-group="${group}"/> ${d.t}</label>
-  `).join("");
-}
+    // Notas (todas opcionais; mas devem ser strings)
+    this.notasDieta = data.notasDieta ?? "";
+    this.notasTemperamento = data.notasTemperamento ?? "";
+    this.notasVacinas = data.notasVacinas ?? "";
+    this.notasSaude = data.notasSaude ?? "";
+    this.notasAdicionais = data.notasAdicionais ?? "";
 
-function clearWeekdays(group){
-  document.querySelectorAll(`input[type="checkbox"][data-group="${group}"]`).forEach(b=> b.checked = false);
-}
+    // Histórico de serviços ligados ao cão (lista de ids)
+    this.servicoIds = Array.isArray(data.servicoIds) ? data.servicoIds : [];
 
-function setSelectedWeekdays(group, csv){
-  const set = new Set(String(csv||"").split(",").map(x=>Number(String(x).trim())).filter(n=>n>=1&&n<=7));
-  document.querySelectorAll(`input[type="checkbox"][data-group="${group}"]`).forEach(b=>{
-    const n = Number(b.getAttribute("data-wd"));
-    b.checked = set.has(n);
-  });
-}
-
-function getSelectedWeekdays(group){
-  const boxes = document.querySelectorAll(`input[type="checkbox"][data-group="${group}"]`);
-  const nums = [];
-  boxes.forEach(b=>{ if (b.checked) nums.push(Number(b.getAttribute("data-wd"))); });
-  return nums.join(",");
-}
-
-/* ---------- Renders ---------- */
-function renderDog(d){
-  $("title").textContent = d.name ? `Cachorro — ${d.name}` : "Cachorro";
-  const age = calcAgeFromBirth(d.birthDate || "");
-  $("subtitle").textContent = d.customerName ? `Tutor: ${d.customerName}` : "";
-
-  $("dogCard").innerHTML = `
-    <div class="section-title">Dados</div>
-    <div class="sub">Raça: ${escapeHtml(d.breed || "-")}</div>
-    <div class="sub">Nascimento: ${escapeHtml(d.birthDate || "-")} ${age ? `• Idade: ${age}` : ""}</div>
-    <div class="sub">Foto (URL): ${escapeHtml(d.photoUrl || "-")}</div>
-    <hr class="sep"/>
-    <div class="sub"><b>Dieta:</b> ${escapeHtml(d.diet || "-")}</div>
-    <div class="sub"><b>Temperamento:</b> ${escapeHtml(d.temperament || "-")}</div>
-    <div class="sub"><b>Vacinas:</b> ${escapeHtml(d.vaccines || "-")}</div>
-    <div class="sub"><b>Saúde:</b> ${escapeHtml(d.health || "-")}</div>
-    <div class="sub"><b>Observações:</b> ${escapeHtml(d.notes || "-")}</div>
-  `;
-}
-
-function renderRegular(list){
-  const root = $("regularList");
-  root.innerHTML = "";
-  if (!list.length){
-    root.innerHTML = `<div class="event"><div class="event__title">Nenhum serviço regular.</div></div>`;
-    return;
+    // Valida imediatamente
+    this.validate();
   }
-  list.forEach(r=>{
-    const el = document.createElement("div");
-    el.className = "event bg-transOpen";
-    el.innerHTML = `
-      <div class="event__title">${escapeHtml(labelType(r.type))}</div>
-      <div class="event__meta">Dias: ${escapeHtml(r.weekdays || "")} • Ativo: ${escapeHtml(r.active || "")}</div>
-      <div class="event__badges">
-        ${badge(`R$ ${formatMoney(r.price||0)}`)}
-        ${badge(r.notes || "")}
-      </div>
-    `;
-    root.appendChild(el);
-  });
-}
 
-function renderServices(list){
-  const root = $("serviceList");
-  root.innerHTML = "";
-  if (!list.length){
-    root.innerHTML = `<div class="event"><div class="event__title">Nenhum serviço registrado.</div></div>`;
-    return;
-  }
-  list.slice().reverse().forEach(s=>{
-    const el = document.createElement("div");
-    el.className = "event bg-bathOpen";
-    el.innerHTML = `
-      <div class="event__title">${escapeHtml(labelType(s.type))}</div>
-      <div class="event__meta">${escapeHtml(s.date || "")} ${s.startTime ? "• "+escapeHtml(s.startTime) : ""} ${s.source==="regular" ? "• Regular" : ""}</div>
-      <div class="event__badges">
-        ${badge(`R$ ${formatMoney(s.price||0)}`)}
-        ${badge(s.operStatus || "")}
-      </div>
-    `;
-    root.appendChild(el);
-  });
-}
+  validate() {
+    // id: se existe, deve ser string não vazia
+    if (this.id !== null) Dog._assertNonEmptyString("id", this.id);
 
-/* ---------- Lookups ---------- */
-async function loadLookups(){
-  const r = await apiJsonp("getLookups", {});
-  if (!r.ok) throw new Error(r.error || "Falha ao carregar lookups.");
-  _lookups = r;
-}
+    // nome: obrigatório
+    Dog._assertNonEmptyString("nome", this.nome);
 
-function fillCustomerSelect(selectedId){
-  const sel = $("edCustomer");
-  sel.innerHTML = "";
-  (_lookups?.customers || []).forEach(c=>{
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = c.name;
-    if (String(c.id) === String(selectedId)) opt.selected = true;
-    sel.appendChild(opt);
-  });
-}
+    // raca: opcional, mas deve ser string
+    Dog._assertString("raca", this.raca);
 
-function prefillRegularCheckboxes(){
-  const creche = _regular.find(r=> String(r.type) === "creche" && String(r.active||"sim").toLowerCase() === "sim");
-  const transp = _regular.find(r=> String(r.type) === "transporte" && String(r.active||"sim").toLowerCase() === "sim");
+    // customerId: estruturalmente obrigatório (string não vazia)
+    Dog._assertNonEmptyString("customerId", this.customerId);
 
-  clearWeekdays("creche");
-  clearWeekdays("transporte");
-
-  if (creche) setSelectedWeekdays("creche", creche.weekdays || "");
-  if (transp) setSelectedWeekdays("transporte", transp.weekdays || "");
-}
-
-/* ---------- Wiring ---------- */
-function wireEditDog(){
-  $("btnCancelDogEdit").addEventListener("click", ()=> closeDialog("dogEditDialog"));
-
-  $("btnEditDog").addEventListener("click", async ()=>{
-    if (!_dog) return;
-    if (!_lookups) await loadLookups();
-
-    $("edName").value = _dog.name || "";
-    $("edBreed").value = _dog.breed || "";
-    $("edBirthDate").value = _dog.birthDate || "";
-    $("edPhotoUrl").value = _dog.photoUrl || "";
-    $("edDiet").value = _dog.diet || "";
-    $("edTemperament").value = _dog.temperament || "";
-    $("edVaccines").value = _dog.vaccines || "";
-    $("edHealth").value = _dog.health || "";
-    $("edNotes").value = _dog.notes || "";
-
-    fillCustomerSelect(_dog.customerId);
-    prefillRegularCheckboxes();
-
-    openDialog("dogEditDialog");
-  });
-
-  $("dogEditForm").addEventListener("submit", async (e)=>{
-    e.preventDefault();
-    if (!_dog) return;
-
-    const btn = $("btnSaveDogEdit");
-    btn.disabled = true;
-    const prevTxt = btn.textContent;
-    btn.textContent = "Salvando…";
-
-    try{
-      const payload = {
-        id: _dog.id,
-        name: $("edName").value.trim(),
-        breed: $("edBreed").value.trim(),
-        birthDate: $("edBirthDate").value,
-        customerId: $("edCustomer").value,
-        photoUrl: $("edPhotoUrl").value.trim(),
-        diet: $("edDiet").value,
-        temperament: $("edTemperament").value,
-        vaccines: $("edVaccines").value,
-        health: $("edHealth").value,
-        notes: $("edNotes").value,
-      };
-
-      const r = await apiJsonp("updateDog", payload);
-      if (!r.ok) throw new Error(r.error || "Falha ao atualizar cachorro.");
-
-      // Save regular schedule (upsert per type)
-      const crecheW = getSelectedWeekdays("creche");
-      const transW  = getSelectedWeekdays("transporte");
-
-      const rr1 = await apiJsonp("setRegularForDog", {
-        dogId: _dog.id,
-        type: "creche",
-        weekdays: crecheW,
-        startTime: "",
-        endTime: "",
-        price: defaultPrice("creche"),
-        notes: "Regular (editado)",
-        active: "sim"
-      });
-      if (!rr1.ok) throw new Error(rr1.error || "Falha ao salvar regular (creche).");
-
-      const rr2 = await apiJsonp("setRegularForDog", {
-        dogId: _dog.id,
-        type: "transporte",
-        weekdays: transW,
-        startTime: "",
-        endTime: "",
-        price: defaultPrice("transporte"),
-        notes: "Regular (editado)",
-        active: "sim"
-      });
-      if (!rr2.ok) throw new Error(rr2.error || "Falha ao salvar regular (transporte).");
-
-      closeDialog("dogEditDialog");
-      await boot();
-    }catch(err){
-      alert(err.message || String(err));
-    }finally{
-      btn.disabled = false;
-      btn.textContent = prevTxt;
+    // dataNascimento: opcional, mas se preenchida deve ser válida no formato
+    Dog._assertString("dataNascimento", this.dataNascimento);
+    if (this.dataNascimento.trim() !== "") {
+      Dog._assertDateBR("dataNascimento", this.dataNascimento);
     }
-  });
+
+    // notas: todas devem ser strings
+    Dog._assertString("notasDieta", this.notasDieta);
+    Dog._assertString("notasTemperamento", this.notasTemperamento);
+    Dog._assertString("notasVacinas", this.notasVacinas);
+    Dog._assertString("notasSaude", this.notasSaude);
+    Dog._assertString("notasAdicionais", this.notasAdicionais);
+
+    // servicoIds: array de strings não vazias
+    Dog._assertIdArray("servicoIds", this.servicoIds);
+  }
+
+  toJSON() {
+    // objeto pronto para salvar em JSON
+    return {
+      tipo: "Dog",
+      id: this.id,
+      nome: this.nome,
+      raca: this.raca,
+      dataNascimento: this.dataNascimento,
+      customerId: this.customerId,
+      notasDieta: this.notasDieta,
+      notasTemperamento: this.notasTemperamento,
+      notasVacinas: this.notasVacinas,
+      notasSaude: this.notasSaude,
+      notasAdicionais: this.notasAdicionais,
+      servicoIds: this.servicoIds,
+    };
+  }
+
+  static fromJSON(obj) {
+    return new Dog(obj || {});
+  }
+
+  // Helpers
+  static _assertString(field, v) {
+    if (typeof v !== "string") throw new Error(`Dog.${field}: deve ser texto.`);
+  }
+
+  static _assertNonEmptyString(field, v) {
+    if (typeof v !== "string" || v.trim() === "") {
+      throw new Error(`Dog.${field}: não pode ser vazio.`);
+    }
+  }
+
+  static _assertIdArray(field, arr) {
+    if (!Array.isArray(arr)) throw new Error(`Dog.${field}: deve ser lista (array).`);
+    for (const x of arr) {
+      if (typeof x !== "string" || x.trim() === "") {
+        throw new Error(`Dog.${field}: contém id inválido.`);
+      }
+    }
+  }
+
+  static _assertDateBR(field, s) {
+    // valida apenas formato e intervalos grossos (MVP)
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(s)) {
+      throw new Error(`Dog.${field}: use DD-MM-AAAA.`);
+    }
+    const [dd, mm, yyyy] = s.split("-").map(Number);
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900 || yyyy > 2100) {
+      throw new Error(`Dog.${field}: data inválida.`);
+    }
+  }
 }
-
-/* ---------- Boot ---------- */
-async function boot(){
-  const id = qs("id");
-  if (!id) return alert("Falta ?id=");
-
-  const r1 = await apiJsonp("getDog", { id });
-  if (!r1.ok) return alert(r1.error || "Falha ao carregar cachorro.");
-
-  _dog = r1.dog;
-  _regular = r1.regularServices || [];
-
-  renderDog(r1.dog);
-  renderRegular(_regular);
-  renderServices(r1.services || []);
-}
-
-renderWeekdays("edRgCrecheDays", "creche");
-renderWeekdays("edRgTransDays", "transporte");
-
-wireEditDog();
-boot().catch(e=>alert(e.message||String(e)));
