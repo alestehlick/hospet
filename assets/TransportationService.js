@@ -1,30 +1,27 @@
-// TransportationService.js — Serviço: Transporte
+// TransportationService.js — Serviço: Transporte (estrito)
+//
+// Regra que você definiu:
+// - direcao só pode ser exatamente:
+//   1) "Para o Hotel"
+//   2) "Para Casa"
 //
 // IMPORTANTE:
-// - O campo `tipo` no JSON é reservado para o "tipo do objeto" (ex.: "TransportationService").
-// - Portanto, a "direção" do transporte NÃO pode se chamar `tipo`.
-// - Aqui usamos `direcao`: "Para o hotel" | "De volta para casa".
-//
-// Estrutura:
-// - dogId: id do cão (obrigatório)
-// - direcao: "Para o hotel" ou "De volta para casa" (obrigatório)
-// - data: "DD-MM-AAAA" (obrigatório)
-// - statusConclusao: "Agendado" | "Concluído"
-// - statusPagamento: "Não pago" | "Pago"
+// - O campo `tipo` é reservado para o tipo do objeto no JSON (ex.: "TransportationService").
+// - Por isso, a direção fica em `direcao` (não em `tipo`).
 
 export class TransportationService {
   constructor(data = {}) {
-    // id pode ser null por enquanto (store gera)
+    // id pode ser null; o localStore gera se faltar
     this.id = data.id ?? null;
 
     // ligação com o cão
     this.dogId = data.dogId ?? null;
 
-    // direção do transporte (campo correto, sem conflito)
-    // aceitamos também `tipoTransporte` por compatibilidade (se você já tiver JSON salvo)
-    this.direcao = data.direcao ?? data.tipoTransporte ?? "";
+    // direção do transporte (estrita)
+    // aceitamos apenas `direcao` (nada de sinônimos/normalização agora)
+    this.direcao = data.direcao ?? "";
 
-    // data do transporte
+    // data do transporte (DD-MM-AAAA)
     this.data = data.data ?? "";
 
     // status
@@ -46,14 +43,11 @@ export class TransportationService {
   }
 
   toJSON() {
-    // JSON SEM conflito:
-    // - tipo = tipo do objeto
-    // - direcao = direção do transporte
     return {
       tipo: "TransportationService",
       id: this.id,
       dogId: this.dogId,
-      direcao: this.direcao,
+      direcao: this.direcao, // "Para o Hotel" | "Para Casa"
       data: this.data,
       statusConclusao: this.statusConclusao,
       statusPagamento: this.statusPagamento,
@@ -61,55 +55,12 @@ export class TransportationService {
   }
 
   static fromJSON(obj) {
-    // Compatibilidade:
-    // se um JSON antigo tiver `tipoTransporte`, convertemos para `direcao`.
-    const normalized = { ...(obj || {}) };
-    if (typeof normalized.direcao !== "string" && typeof normalized.tipoTransporte === "string") {
-      normalized.direcao = normalized.tipoTransporte;
-    }
-    return new TransportationService(normalized);
+    // Sem compatibilidade automática: se vier diferente, falha (como você quer).
+    return new TransportationService(obj || {});
   }
 
   // ------------------ helpers estruturais ------------------
 
   static _assertNonEmptyString(field, v) {
     if (typeof v !== "string" || v.trim() === "") {
-      throw new Error(`TransportationService.${field}: não pode ser vazio.`);
-    }
-  }
-
-  static _assertDirecao(field, v) {
-    if (typeof v !== "string") {
-      throw new Error(`TransportationService.${field}: deve ser texto.`);
-    }
-    const vv = v.trim();
-    const allowed = new Set(["Para o hotel", "De volta para casa"]);
-    if (!allowed.has(vv)) {
-      throw new Error(
-        `TransportationService.${field}: valor inválido. Use "Para o hotel" ou "De volta para casa".`
-      );
-    }
-  }
-
-  static _assertDateBR(field, s) {
-    if (typeof s !== "string" || !/^\d{2}-\d{2}-\d{4}$/.test(s)) {
-      throw new Error(`TransportationService.${field}: use DD-MM-AAAA.`);
-    }
-    const [dd, mm, yyyy] = s.split("-").map(Number);
-    if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900 || yyyy > 2100) {
-      throw new Error(`TransportationService.${field}: data inválida.`);
-    }
-  }
-
-  static _assertConclusao(field, v) {
-    if (v !== "Agendado" && v !== "Concluído") {
-      throw new Error(`TransportationService.${field}: use "Agendado" ou "Concluído".`);
-    }
-  }
-
-  static _assertPagamento(field, v) {
-    if (v !== "Não pago" && v !== "Pago") {
-      throw new Error(`TransportationService.${field}: use "Não pago" ou "Pago".`);
-    }
-  }
-}
+      throw new Error(`Transpo
