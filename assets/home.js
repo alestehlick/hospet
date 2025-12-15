@@ -7,19 +7,20 @@
    ========================================================= */
 
 let _searchTimer = null;
-let _events = [];                 // local state for fast UI updates
-let _eventIndex = new Map();      // "kind:id" -> event reference
+let _events = [];
+let _eventIndex = new Map();
 
-function setApiStatus(msg){
-  $("apiStatus").textContent = msg || "";
+function setApiStatus(msg) {
+  const el = $("apiStatus");
+  if (el) el.textContent = msg || "";
 }
 
-function defaultPrice(type){
+function defaultPrice(type) {
   const map = { creche:120, diaria:180, banho:120, tosa_higienica:60, transporte:40, outro:0 };
   return map[type] ?? 0;
 }
 
-function labelTipoServico(type){
+function labelTipoServico(type) {
   const map = {
     creche: "Creche",
     diaria: "Diária (hotel)",
@@ -31,13 +32,13 @@ function labelTipoServico(type){
   return map[type] || type;
 }
 
-function eventBgClass(ev){
+function eventBgClass(ev) {
   if (ev.kind === "task") {
     if (ev.operStatus === "concluido") return "bg-okTask stripe";
     return "bg-taskOpen stripe";
   }
   if (ev.operStatus === "concluido") return "bg-ok";
-  switch(ev.type){
+  switch (ev.type) {
     case "banho": return "bg-bathOpen";
     case "tosa_higienica": return "bg-hygOpen";
     case "transporte": return "bg-transOpen";
@@ -48,35 +49,35 @@ function eventBgClass(ev){
   }
 }
 
-function sortEvents(list){
+function sortEvents(list) {
   return list.slice().sort((a, b) =>
     String(a.startTime || a.time || "99:99").localeCompare(String(b.startTime || b.time || "99:99"))
   );
 }
 
-function keyOf(ev){ return `${ev.kind}:${ev.id}`; }
+function keyOf(ev) { return `${ev.kind}:${ev.id}`; }
 
-function rebuildIndex(){
+function rebuildIndex() {
   _eventIndex = new Map();
   for (const ev of _events) _eventIndex.set(keyOf(ev), ev);
 }
 
-function renderOneEventHtml(ev){
+function renderOneEventHtml(ev) {
   const bg = eventBgClass(ev);
-  const time = ev.startTime ? `${ev.startTime}${ev.endTime ? "–"+ev.endTime : ""}` : "";
+  const time = ev.startTime ? `${ev.startTime}${ev.endTime ? "–" + ev.endTime : ""}` : "";
   const title = ev.kind === "task"
     ? (ev.title || "Tarefa")
     : `${labelTipoServico(ev.type)} — ${ev.dogName || "Cachorro"}`;
 
   const meta = ev.kind === "task"
-    ? `${ev.date || ""}${ev.time ? " • "+ev.time : ""}`
-    : `${ev.date || ""}${time ? " • "+time : ""}${ev.customerName ? " • "+ev.customerName : ""}${ev.source==="regular" ? " • Regular" : ""}`;
+    ? `${ev.date || ""}${ev.time ? " • " + ev.time : ""}`
+    : `${ev.date || ""}${time ? " • " + time : ""}${ev.customerName ? " • " + ev.customerName : ""}${ev.source === "regular" ? " • Regular" : ""}`;
 
   const statusTxt = ev.operStatus === "concluido" ? "Concluído" : "Em aberto";
 
   return `
     <div class="event ${bg}" data-id="${escapeHtml(ev.id)}" data-kind="${escapeHtml(ev.kind)}">
-      <button class="iconX" title="Excluir" aria-label="Excluir">×</button>
+      <button class="iconX" title="Excluir" aria-label="Excluir" type="button">×</button>
       <div class="event__title">${escapeHtml(title)}</div>
       <div class="event__meta">${escapeHtml(meta)}</div>
       <div class="event__badges">
@@ -85,31 +86,34 @@ function renderOneEventHtml(ev){
         <span class="badge" data-sync hidden>Sincronizando…</span>
       </div>
       <div class="event__actions">
-        <button class="btn btn--ghost btnToggle">${ev.operStatus === "concluido" ? "Reabrir" : "Marcar como concluído"}</button>
+        <button class="btn btn--ghost btnToggle" type="button">
+          ${ev.operStatus === "concluido" ? "Reabrir" : "Marcar como concluído"}
+        </button>
       </div>
     </div>
   `;
 }
 
-function renderEvents(list){
+function renderEvents(list) {
+  const root = $("eventsList");
+  if (!root) return;
+
   _events = sortEvents(list || []);
   rebuildIndex();
 
-  const root = $("eventsList");
-  if (!_events.length){
+  if (!_events.length) {
     root.innerHTML = `<div class="event"><div class="event__title">Nenhum evento para hoje.</div></div>`;
     return;
   }
 
-  // Batch DOM write: single innerHTML update
   root.innerHTML = _events.map(renderOneEventHtml).join("");
 }
 
-/* ---------- Delegated event handlers (fewer listeners) ---------- */
-function wireEventsDelegation(){
+function wireEventsDelegation() {
   const root = $("eventsList");
+  if (!root) return;
 
-  root.addEventListener("click", (e)=>{
+  root.addEventListener("click", (e) => {
     const card = e.target.closest(".event");
     if (!card || !root.contains(card)) return;
 
@@ -118,8 +122,7 @@ function wireEventsDelegation(){
     const ev = _eventIndex.get(`${kind}:${id}`);
     if (!ev) return;
 
-    // DELETE (optimistic)
-    if (e.target.closest(".iconX")){
+    if (e.target.closest(".iconX")) {
       if (!confirm("Excluir este evento?")) return;
 
       _events = _events.filter(x => !(String(x.id) === String(id) && String(x.kind) === String(kind)));
@@ -129,8 +132,7 @@ function wireEventsDelegation(){
       return;
     }
 
-    // TOGGLE (optimistic)
-    if (e.target.closest(".btnToggle")){
+    if (e.target.closest(".btnToggle")) {
       const next = ev.operStatus === "concluido" ? "aberto" : "concluido";
       ev.operStatus = next;
 
@@ -145,13 +147,13 @@ function wireEventsDelegation(){
 
       enqueue("setEventStatus", { id, kind, operStatus: next });
 
-      setTimeout(()=>{ try{ if (syncBadge) syncBadge.hidden = true; }catch(_){ } }, 1200);
+      setTimeout(() => { if (syncBadge) syncBadge.hidden = true; }, 1200);
     }
   });
 }
 
 /* ---------- Lookups ---------- */
-async function loadLookups(){
+async function loadLookups() {
   const r = await apiGetLookupsCached();
   if (!r.ok) throw new Error(r.error || "Falha ao carregar listas.");
 
@@ -159,49 +161,51 @@ async function loadLookups(){
   const customers = r.customers || [];
 
   const selDog = $("svcDog");
-  selDog.innerHTML = "";
-  dogs.forEach(d=>{
-    const opt = document.createElement("option");
-    opt.value = d.id;
-    opt.textContent = d.name + (d.customerName ? ` (Tutor: ${d.customerName})` : "");
-    selDog.appendChild(opt);
-  });
-
   const selCust = $("dogCustomer");
-  selCust.innerHTML = "";
-  customers.forEach(c=>{
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = c.name;
-    selCust.appendChild(opt);
-  });
+  if (selDog) {
+    selDog.innerHTML = "";
+    dogs.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.name + (d.customerName ? ` (Tutor: ${d.customerName})` : "");
+      selDog.appendChild(opt);
+    });
+  }
+
+  if (selCust) {
+    selCust.innerHTML = "";
+    customers.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = c.name;
+      selCust.appendChild(opt);
+    });
+  }
 }
 
 /* ---------- Today ---------- */
-async function loadToday({ force = false } = {}){
+async function loadToday({ force = false } = {}) {
   const date = todayISO();
-  $("todayTitle").textContent = `Hoje — ${formatDatePt(date)}`;
+  const title = $("todayTitle");
+  if (title) title.textContent = `Hoje — ${formatDatePt(date)}`;
 
-  let r;
-  if (force) r = await apiJsonp("getToday", { date });
-  else r = await apiGetTodayCached(date);
-
+  const r = force ? await apiJsonp("getToday", { date }) : await apiGetTodayCached(date);
   if (!r.ok) throw new Error(r.error || "Falha ao carregar agenda.");
   renderEvents(r.events || []);
 }
 
 /* ---------- Autocomplete ---------- */
-function hideSuggest(){
+function hideSuggest() {
   const box = $("searchSuggest");
+  if (!box) return;
   box.hidden = true;
   box.innerHTML = "";
 }
-
-function showSuggest(items){
+function showSuggest(items) {
   const box = $("searchSuggest");
-  if (!items.length){ hideSuggest(); return; }
+  if (!box) return;
+  if (!items.length) { hideSuggest(); return; }
   box.hidden = false;
-
   box.innerHTML = items.map(it => `
     <div class="row" data-kind="${escapeHtml(it.kind)}" data-id="${escapeHtml(it.id)}">
       <div>
@@ -213,20 +217,22 @@ function showSuggest(items){
   `).join("");
 }
 
-async function refreshSuggest(){
-  const q = $("searchInput").value.trim();
-  if (q.length < 2){ hideSuggest(); return; }
+async function refreshSuggest() {
+  const input = $("searchInput");
+  if (!input) return;
+  const q = input.value.trim();
+  if (q.length < 2) { hideSuggest(); return; }
 
   const r = await apiJsonp("search", { q });
   if (!r.ok) throw new Error(r.error || "Falha na busca.");
 
-  const dogs = (r.dogs || []).slice(0,8).map(d => ({
+  const dogs = (r.dogs || []).slice(0, 8).map(d => ({
     kind:"dog", kindLabel:"Cachorro",
     id:d.id, name:d.name,
     meta: d.customerName ? `Tutor: ${d.customerName}` : ""
   }));
 
-  const customers = (r.customers || []).slice(0,8).map(c => ({
+  const customers = (r.customers || []).slice(0, 8).map(c => ({
     kind:"customer", kindLabel:"Cliente",
     id:c.id, name:c.name,
     meta: c.whatsapp ? `WhatsApp: ${c.whatsapp}` : ""
@@ -235,8 +241,10 @@ async function refreshSuggest(){
   showSuggest([...dogs, ...customers]);
 }
 
-async function runSearch(){
-  const q = $("searchInput").value.trim();
+async function runSearch() {
+  const input = $("searchInput");
+  if (!input) return;
+  const q = input.value.trim();
   if (!q) return;
 
   const r = await apiJsonp("search", { q });
@@ -244,20 +252,21 @@ async function runSearch(){
 
   const dogs = r.dogs || [];
   const customers = r.customers || [];
-  if (dogs.length === 1 && customers.length === 0){
+  if (dogs.length === 1 && customers.length === 0) {
     window.open(`dog.html?id=${encodeURIComponent(dogs[0].id)}`, "_blank");
     return;
   }
-  if (customers.length === 1 && dogs.length === 0){
+  if (customers.length === 1 && dogs.length === 0) {
     window.open(`customer.html?id=${encodeURIComponent(customers[0].id)}`, "_blank");
     return;
   }
   alert("Use as sugestões da busca para abrir a ficha.");
 }
 
-/* ---------- Weekdays UI (new dog only) ---------- */
-function renderWeekdays(containerId, group){
+/* ---------- Weekdays UI ---------- */
+function renderWeekdays(containerId, group) {
   const root = $(containerId);
+  if (!root) return;
   root.className = "weekdays";
   const days = [
     {n:1, t:"Seg"}, {n:2, t:"Ter"}, {n:3, t:"Qua"},
@@ -267,34 +276,31 @@ function renderWeekdays(containerId, group){
     <label><input type="checkbox" data-wd="${d.n}" data-group="${group}"/> ${d.t}</label>
   `).join("");
 }
-
-function getSelectedWeekdays(group){
+function getSelectedWeekdays(group) {
   const boxes = document.querySelectorAll(`input[type="checkbox"][data-group="${group}"]`);
   const nums = [];
-  boxes.forEach(b=>{ if (b.checked) nums.push(Number(b.getAttribute("data-wd"))); });
+  boxes.forEach(b => { if (b.checked) nums.push(Number(b.getAttribute("data-wd"))); });
   return nums.join(",");
 }
-
-function clearWeekdays(group){
-  document.querySelectorAll(`input[type="checkbox"][data-group="${group}"]`).forEach(b=> b.checked = false);
+function clearWeekdays(group) {
+  document.querySelectorAll(`input[type="checkbox"][data-group="${group}"]`).forEach(b => b.checked = false);
 }
 
 /* ---------- Dialog helpers ---------- */
-function openDialog(id){ $(id).showModal(); }
-function closeDialog(id){ $(id).close(); }
+function openDialog(id) { const d = $(id); if (d) d.showModal(); }
+function closeDialog(id) { const d = $(id); if (d) d.close(); }
 
 /* ---------- Wiring ---------- */
-function wire(){
-  // sync status (top right)
-  window.addEventListener("hb:sync", (e)=>{
+function wire() {
+  window.addEventListener("hb:sync", (e) => {
     const { syncing, queued } = e.detail || {};
     if (syncing && queued) setApiStatus(`Sincronizando… (${queued})`);
     else if (queued) setApiStatus(`Fila pendente (${queued})`);
     else setApiStatus("API OK");
   });
 
-  document.querySelectorAll(".btnCancel").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
+  document.querySelectorAll(".btnCancel").forEach(btn => {
+    btn.addEventListener("click", () => {
       const dlg = btn.closest("dialog");
       if (dlg) dlg.close();
     });
@@ -303,48 +309,60 @@ function wire(){
   renderWeekdays("rgCrecheDays", "creche");
   renderWeekdays("rgTransDays", "transporte");
 
-  // delegated click on suggest list (no per-row listeners)
-  $("searchSuggest").addEventListener("click", (e)=>{
-    const row = e.target.closest(".row");
-    if (!row) return;
-    const kind = row.getAttribute("data-kind");
-    const id = row.getAttribute("data-id");
-    hideSuggest();
-    if (kind === "dog") window.open(`dog.html?id=${encodeURIComponent(id)}`, "_blank");
-    if (kind === "customer") window.open(`customer.html?id=${encodeURIComponent(id)}`, "_blank");
-  });
+  const suggest = $("searchSuggest");
+  if (suggest) {
+    suggest.addEventListener("click", (e) => {
+      const row = e.target.closest(".row");
+      if (!row) return;
+      const kind = row.getAttribute("data-kind");
+      const id = row.getAttribute("data-id");
+      hideSuggest();
+      if (kind === "dog") window.open(`dog.html?id=${encodeURIComponent(id)}`, "_blank");
+      if (kind === "customer") window.open(`customer.html?id=${encodeURIComponent(id)}`, "_blank");
+    });
+  }
 
-  document.addEventListener("click", (e)=>{
+  document.addEventListener("click", (e) => {
     if (!e.target.closest(".searchWrap")) hideSuggest();
   });
 
-  $("searchInput").addEventListener("input", ()=>{
-    clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(()=>{ refreshSuggest().catch(()=>{}); }, 220);
-  });
+  const input = $("searchInput");
+  if (input) {
+    input.addEventListener("input", () => {
+      clearTimeout(_searchTimer);
+      _searchTimer = setTimeout(() => { refreshSuggest().catch(() => {}); }, 220);
+    });
 
-  $("searchInput").addEventListener("keydown", (e)=>{
-    if (e.key === "Escape") hideSuggest();
-    if (e.key === "Enter") runSearch().catch(()=>{});
-  });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") hideSuggest();
+      if (e.key === "Enter") runSearch().catch(() => {});
+    });
+  }
 
-  $("searchBtn").addEventListener("click", ()=> runSearch().catch(()=>{}));
+  const btnSearch = $("searchBtn");
+  if (btnSearch) btnSearch.addEventListener("click", () => runSearch().catch(() => {}));
 
-  $("btnRefresh").addEventListener("click", ()=> boot({ forceToday: true }));
+  const btnRefresh = $("btnRefresh");
+  if (btnRefresh) btnRefresh.addEventListener("click", () => boot({ forceToday: true }));
 
-  $("btnGenerate").addEventListener("click", async ()=>{
-    try{
-      const startDate = todayISO();
-      const r = await apiJsonp("generateFromRegular", { startDate, days: 14 });
-      if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
-      alert(`Agenda gerada: ${r.created} serviços (janela ${r.startDate} → ${r.days} dias)`);
-      await loadToday({ force: true });
-    }catch(err){
-      alert(err.message || String(err));
-    }
-  });
+  const btnGenerate = $("btnGenerate");
+  if (btnGenerate) {
+    btnGenerate.addEventListener("click", async () => {
+      try {
+        const startDate = todayISO();
+        const r = await apiJsonp("generateFromRegular", { startDate, days: 14 });
+        if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
+        alert(`Agenda gerada: ${r.created} serviços (janela ${r.startDate} → ${r.days} dias)`);
+        await loadToday({ force: true });
+      } catch (err) {
+        alert(err.message || String(err));
+      }
+    });
+  }
 
-  $("btnNewService").addEventListener("click", ()=>{
+  // --- dialogs + forms (same logic as yours; kept intact) ---
+  const btnNewService = $("btnNewService");
+  if (btnNewService) btnNewService.addEventListener("click", () => {
     $("svcType").value = "creche";
     $("svcDate").value = todayISO();
     $("svcStart").value = "";
@@ -354,11 +372,13 @@ function wire(){
     openDialog("serviceDialog");
   });
 
-  $("svcType").addEventListener("change", ()=>{
+  const svcType = $("svcType");
+  if (svcType) svcType.addEventListener("change", () => {
     $("svcPrice").value = defaultPrice($("svcType").value);
   });
 
-  $("serviceForm").addEventListener("submit", async (e)=>{
+  const serviceForm = $("serviceForm");
+  if (serviceForm) serviceForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const payload = {
       type: $("svcType").value,
@@ -379,7 +399,8 @@ function wire(){
     if (payload.date === todayISO()) await loadToday({ force: true });
   });
 
-  $("btnNewTask").addEventListener("click", ()=>{
+  const btnNewTask = $("btnNewTask");
+  if (btnNewTask) btnNewTask.addEventListener("click", () => {
     $("taskTitle").value = "";
     $("taskDate").value = todayISO();
     $("taskTime").value = "";
@@ -387,7 +408,8 @@ function wire(){
     openDialog("taskDialog");
   });
 
-  $("taskForm").addEventListener("submit", async (e)=>{
+  const taskForm = $("taskForm");
+  if (taskForm) taskForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const payload = {
       title: $("taskTitle").value.trim(),
@@ -404,7 +426,8 @@ function wire(){
     if (payload.date === todayISO()) await loadToday({ force: true });
   });
 
-  $("btnNewCustomer").addEventListener("click", ()=>{
+  const btnNewCustomer = $("btnNewCustomer");
+  if (btnNewCustomer) btnNewCustomer.addEventListener("click", () => {
     $("custName").value = "";
     $("custWhatsapp").value = "";
     $("custEmail").value = "";
@@ -415,7 +438,8 @@ function wire(){
     openDialog("customerDialog");
   });
 
-  $("customerForm").addEventListener("submit", async (e)=>{
+  const customerForm = $("customerForm");
+  if (customerForm) customerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const payload = {
       name: $("custName").value.trim(),
@@ -435,7 +459,8 @@ function wire(){
     await loadLookups();
   });
 
-  $("btnNewDog").addEventListener("click", ()=>{
+  const btnNewDog = $("btnNewDog");
+  if (btnNewDog) btnNewDog.addEventListener("click", () => {
     $("dogName").value = "";
     $("dogBreed").value = "";
     $("dogBirthDate").value = "";
@@ -451,11 +476,13 @@ function wire(){
     openDialog("dogDialog");
   });
 
-  $("dogBirthDate").addEventListener("change", ()=>{
+  const dogBirth = $("dogBirthDate");
+  if (dogBirth) dogBirth.addEventListener("change", () => {
     $("dogAgeDisplay").value = calcAgeFromBirth($("dogBirthDate").value);
   });
 
-  $("dogForm").addEventListener("submit", async (e)=>{
+  const dogForm = $("dogForm");
+  if (dogForm) dogForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const payload = {
       name: $("dogName").value.trim(),
@@ -476,29 +503,23 @@ function wire(){
     const dogId = r.id;
 
     const crecheW = getSelectedWeekdays("creche");
-    if (crecheW){
+    if (crecheW) {
       const rr = await apiJsonp("addRegularService", {
-        dogId,
-        type: "creche",
-        weekdays: crecheW,
-        startTime: "",
-        endTime: "",
+        dogId, type: "creche", weekdays: crecheW,
+        startTime: "", endTime: "",
         price: defaultPrice("creche"),
-        notes: "Regular (criado no cadastro)"
+        notes: "Regular (criado no cadastro)",
       });
       if (!rr.ok) return alert(rr.error || "Falha ao salvar regular (creche).");
     }
 
     const transW = getSelectedWeekdays("transporte");
-    if (transW){
+    if (transW) {
       const rr = await apiJsonp("addRegularService", {
-        dogId,
-        type: "transporte",
-        weekdays: transW,
-        startTime: "",
-        endTime: "",
+        dogId, type: "transporte", weekdays: transW,
+        startTime: "", endTime: "",
         price: defaultPrice("transporte"),
-        notes: "Regular (criado no cadastro)"
+        notes: "Regular (criado no cadastro)",
       });
       if (!rr.ok) return alert(rr.error || "Falha ao salvar regular (transporte).");
     }
@@ -509,28 +530,27 @@ function wire(){
   });
 }
 
-async function boot({ forceToday = false } = {}){
-  try{
+async function boot({ forceToday = false } = {}) {
+  try {
     setApiStatus("Conectando…");
     const ping = await apiJsonp("ping", {});
     if (!ping.ok) throw new Error(ping.error || "API offline.");
 
-    if (queueSize() > 0) processQueue().catch(()=>{});
-
+    if (queueSize() > 0) processQueue().catch(() => {});
     setApiStatus("API OK");
 
     await loadLookups();
     await loadToday({ force: forceToday });
 
-    setInterval(()=> loadToday().catch(()=>{}), 60_000);
-  }catch(err){
+    setInterval(() => loadToday().catch(() => {}), 60_000);
+  } catch (err) {
     console.error(err);
     setApiStatus("API com erro");
     alert(err.message || String(err));
   }
 }
 
-(function init(){
+(function init() {
   wireEventsDelegation();
   wire();
   boot();
