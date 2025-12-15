@@ -4,14 +4,12 @@
 // - `tipo` no JSON é reservado para o tipo do objeto (ex.: "TransportationService").
 // - A direção do transporte fica em `direcao`.
 //
-// Direção aceita (entrada):
-// - "Para o hotel" (qualquer capitalização, com espaços extras)
-// - "De volta para casa" (idem)
-// - "ToHotel" / "BackHome" (como você escreveu originalmente)
-// - "to_hotel" / "back_home" (variações comuns)
+// Direção aceita (entrada) — SOMENTE EM PORTUGUÊS:
+// - "Para o Hotel"
+// - "Para Casa"
 //
-// Direção armazenada (saída / padrão interno):
-// - sempre será "Para o hotel" OU "De volta para casa"
+// Direção armazenada:
+// - exatamente "Para o Hotel" OU "Para Casa" (sem normalização para inglês)
 
 export class TransportationService {
   constructor(data = {}) {
@@ -19,18 +17,9 @@ export class TransportationService {
 
     this.dogId = data.dogId ?? null;
 
-    // Aceitamos alguns nomes por compatibilidade:
-    // - direcao (novo padrão)
-    // - tipoTransporte (legado)
-    // - transportationType (se você usar em algum lugar)
-    const rawDirecao =
-      data.direcao ??
-      data.tipoTransporte ??
-      data.transportationType ??
-      "";
-
-    // Normalizamos para um valor canônico PT-BR
-    this.direcao = TransportationService._normalizeDirecao(rawDirecao);
+    // Aceitamos somente nomes em português para o campo.
+    // (Mantemos compatibilidade apenas com `tipoTransporte`, que também é português.)
+    this.direcao = data.direcao ?? data.tipoTransporte ?? "";
 
     this.data = data.data ?? "";
 
@@ -44,11 +33,7 @@ export class TransportationService {
     if (this.id !== null) TransportationService._assertNonEmptyString("id", this.id);
 
     TransportationService._assertNonEmptyString("dogId", this.dogId);
-
-    // Aqui, em vez de exigir que a entrada já venha perfeita,
-    // nós garantimos que após normalização ela ficou em um valor permitido.
     TransportationService._assertDirecao("direcao", this.direcao);
-
     TransportationService._assertDateBR("data", this.data);
 
     TransportationService._assertConclusao("statusConclusao", this.statusConclusao);
@@ -60,7 +45,7 @@ export class TransportationService {
       tipo: "TransportationService",
       id: this.id,
       dogId: this.dogId,
-      direcao: this.direcao, // sempre canônico PT-BR
+      direcao: this.direcao, // "Para o Hotel" | "Para Casa"
       data: this.data,
       statusConclusao: this.statusConclusao,
       statusPagamento: this.statusPagamento,
@@ -68,7 +53,7 @@ export class TransportationService {
   }
 
   static fromJSON(obj) {
-    // Se vier JSON legado, aceitamos e normalizamos no constructor.
+    // Se vier um JSON legado com `tipoTransporte`, ainda aceitamos (português).
     return new TransportationService(obj || {});
   }
 
@@ -80,42 +65,15 @@ export class TransportationService {
     }
   }
 
-  static _normalizeDirecao(v) {
-    // Normaliza entrada livre -> valores canônicos PT-BR
-    // Se não reconhecer, devolve string original (para a validação falhar com mensagem clara).
-
-    if (typeof v !== "string") return "";
-
-    // tira espaços extras e padroniza pra comparação
-    const s = v.trim();
-
-    // comparação “case-insensitive” + alguns formatos comuns
-    const key = s
-      .toLowerCase()
-      .replace(/\s+/g, " ")     // múltiplos espaços -> 1
-      .replace(/[_-]+/g, "");   // "_" "-" -> remove (ex.: to_hotel -> tohotel)
-
-    // Aceita PT-BR
-    if (key === "para o hotel" || key === "paraohotel") return "Para o hotel";
-    if (key === "de volta para casa" || key === "devoltaparacasa") return "De volta para casa";
-
-    // Aceita o seu formato original (ToHotel / BackHome)
-    if (key === "tohotel") return "Para o hotel";
-    if (key === "backhome") return "De volta para casa";
-
-    // Não reconheceu -> retorna como está (vai falhar no assertDirecao)
-    return s;
-  }
-
   static _assertDirecao(field, v) {
     if (typeof v !== "string") {
       throw new Error(`TransportationService.${field}: deve ser texto.`);
     }
-    const vv = v.trim();
-    const allowed = new Set(["Para o hotel", "De volta para casa"]);
-    if (!allowed.has(vv)) {
+
+    // Regra estrita: SOMENTE dois valores (case-sensitive).
+    if (v !== "Para o Hotel" && v !== "Para Casa") {
       throw new Error(
-        `TransportationService.${field}: valor inválido. Use "Para o hotel" ou "De volta para casa".`
+        `TransportationService.${field}: valor inválido. Use "Para o Hotel" ou "Para Casa".`
       );
     }
   }
