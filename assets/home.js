@@ -1,12 +1,14 @@
 /* =========================================================
-   Home (Agenda) — Fast UI
+   Home (Agenda) — Faster UI (Event Delegation + Batch Render)
    - optimistic UI for toggle/delete
    - write-behind queue
    - avoids full reload after every click
+   - fewer listeners (single delegated handler)
    ========================================================= */
 
 let _searchTimer = null;
-let _events = []; // local state for fast UI updates
+let _events = [];                 // local state for fast UI updates
+let _eventIndex = new Map();      // "kind:id" -> event reference
 
 function setApiStatus(msg){
   $("apiStatus").textContent = msg || "";
@@ -52,26 +54,18 @@ function sortEvents(list){
   );
 }
 
-function renderEvents(list){
-  _events = sortEvents(list || []);
-  const root = $("eventsList");
-  root.innerHTML = "";
+function keyOf(ev){ return `${ev.kind}:${ev.id}`; }
 
-  if (!_events.length){
-    root.innerHTML = `<div class="event"><div class="event__title">Nenhum evento para hoje.</div></div>`;
-    return;
-  }
-
-  for (const ev of _events){
-    root.appendChild(renderOneEvent(ev));
-  }
+function rebuildIndex(){
+  _eventIndex = new Map();
+  for (const ev of _events) _eventIndex.set(keyOf(ev), ev);
 }
 
-function renderOneEvent(ev){
+function renderOneEventHtml(ev){
   const bg = eventBgClass(ev);
   const time = ev.startTime ? `${ev.startTime}${ev.endTime ? "–"+ev.endTime : ""}` : "";
   const title = ev.kind === "task"
-    ? ev.title
+    ? (ev.title || "Tarefa")
     : `${labelTipoServico(ev.type)} — ${ev.dogName || "Cachorro"}`;
 
   const meta = ev.kind === "task"
@@ -80,63 +74,80 @@ function renderOneEvent(ev){
 
   const statusTxt = ev.operStatus === "concluido" ? "Concluído" : "Em aberto";
 
-  const el = document.createElement("div");
-  el.className = `event ${bg}`;
-  el.dataset.id = ev.id;
-  el.dataset.kind = ev.kind;
-
-  el.innerHTML = `
-    <button class="iconX" title="Excluir" aria-label="Excluir">×</button>
-    <div class="event__title">${escapeHtml(title)}</div>
-    <div class="event__meta">${escapeHtml(meta)}</div>
-    <div class="event__badges">
-      <span class="badge">${escapeHtml(statusTxt)}</span>
-      ${ev.kind === "service" ? `<span class="badge">R$ ${formatMoney(ev.price || 0)}</span>` : ""}
-      <span class="badge" data-sync hidden>Sincronizando…</span>
-    </div>
-    <div class="event__actions">
-      <button class="btn btn--ghost btnToggle">${ev.operStatus === "concluido" ? "Reabrir" : "Marcar como concluído"}</button>
+  return `
+    <div class="event ${bg}" data-id="${escapeHtml(ev.id)}" data-kind="${escapeHtml(ev.kind)}">
+      <button class="iconX" title="Excluir" aria-label="Excluir">×</button>
+      <div class="event__title">${escapeHtml(title)}</div>
+      <div class="event__meta">${escapeHtml(meta)}</div>
+      <div class="event__badges">
+        <span class="badge" data-status>${escapeHtml(statusTxt)}</span>
+        ${ev.kind === "service" ? `<span class="badge">R$ ${formatMoney(ev.price || 0)}</span>` : ""}
+        <span class="badge" data-sync hidden>Sincronizando…</span>
+      </div>
+      <div class="event__actions">
+        <button class="btn btn--ghost btnToggle">${ev.operStatus === "concluido" ? "Reabrir" : "Marcar como concluído"}</button>
+      </div>
     </div>
   `;
+}
 
-  const syncBadge = el.querySelector("[data-sync]");
+function renderEvents(list){
+  _events = sortEvents(list || []);
+  rebuildIndex();
 
-  // DELETE (optimistic)
-  el.querySelector(".iconX").addEventListener("click", ()=>{
-    if (!confirm("Excluir este evento?")) return;
+  const root = $("eventsList");
+  if (!_events.length){
+    root.innerHTML = `<div class="event"><div class="event__title">Nenhum evento para hoje.</div></div>`;
+    return;
+  }
 
-    // optimistic remove
-    const before = _events.slice();
-    _events = _events.filter(x => !(x.id === ev.id && x.kind === ev.kind));
-    renderEvents(_events);
+  // Batch DOM write: single innerHTML update
+  root.innerHTML = _events.map(renderOneEventHtml).join("");
+}
 
-    // queue write
-    enqueue("deleteEvent", { id: ev.id, kind: ev.kind });
+/* ---------- Delegated event handlers (fewer listeners) ---------- */
+function wireEventsDelegation(){
+  const root = $("eventsList");
 
-    // if you want: light auto-refresh later (optional)
-    // setTimeout(()=> loadToday({force:true}).catch(()=>{}), 2000);
+  root.addEventListener("click", (e)=>{
+    const card = e.target.closest(".event");
+    if (!card || !root.contains(card)) return;
+
+    const kind = card.getAttribute("data-kind");
+    const id = card.getAttribute("data-id");
+    const ev = _eventIndex.get(`${kind}:${id}`);
+    if (!ev) return;
+
+    // DELETE (optimistic)
+    if (e.target.closest(".iconX")){
+      if (!confirm("Excluir este evento?")) return;
+
+      _events = _events.filter(x => !(String(x.id) === String(id) && String(x.kind) === String(kind)));
+      renderEvents(_events);
+
+      enqueue("deleteEvent", { id, kind });
+      return;
+    }
+
+    // TOGGLE (optimistic)
+    if (e.target.closest(".btnToggle")){
+      const next = ev.operStatus === "concluido" ? "aberto" : "concluido";
+      ev.operStatus = next;
+
+      const syncBadge = card.querySelector("[data-sync]");
+      if (syncBadge) syncBadge.hidden = false;
+
+      card.className = `event ${eventBgClass(ev)}`;
+      const btn = card.querySelector(".btnToggle");
+      if (btn) btn.textContent = (next === "concluido") ? "Reabrir" : "Marcar como concluído";
+      const st = card.querySelector("[data-status]");
+      if (st) st.textContent = (next === "concluido") ? "Concluído" : "Em aberto";
+
+      enqueue("setEventStatus", { id, kind, operStatus: next });
+
+      setTimeout(()=>{ try{ if (syncBadge) syncBadge.hidden = true; }catch(_){ } }, 1200);
+    }
   });
-
-  // TOGGLE (optimistic)
-  el.querySelector(".btnToggle").addEventListener("click", ()=>{
-    // update local state first
-    const next = ev.operStatus === "concluido" ? "aberto" : "concluido";
-    ev.operStatus = next;
-
-    // update DOM immediately
-    syncBadge.hidden = false;
-    el.className = `event ${eventBgClass(ev)}`;
-    el.querySelector(".btnToggle").textContent = (next === "concluido") ? "Reabrir" : "Marcar como concluído";
-    el.querySelector(".event__badges .badge").textContent = (next === "concluido") ? "Concluído" : "Em aberto";
-
-    // queue write
-    enqueue("setEventStatus", { id: ev.id, kind: ev.kind, operStatus: next });
-
-    // hide badge after a short time (actual sync may take longer; status also shown top)
-    setTimeout(()=>{ try{ syncBadge.hidden = true; }catch(_){ } }, 1200);
-  });
-
-  return el;
 }
 
 /* ---------- Lookups ---------- */
@@ -171,7 +182,6 @@ async function loadToday({ force = false } = {}){
   const date = todayISO();
   $("todayTitle").textContent = `Hoje — ${formatDatePt(date)}`;
 
-  // force bypass frontend cache if requested
   let r;
   if (force) r = await apiJsonp("getToday", { date });
   else r = await apiGetTodayCached(date);
@@ -191,8 +201,9 @@ function showSuggest(items){
   const box = $("searchSuggest");
   if (!items.length){ hideSuggest(); return; }
   box.hidden = false;
+
   box.innerHTML = items.map(it => `
-    <div class="row" data-kind="${it.kind}" data-id="${it.id}">
+    <div class="row" data-kind="${escapeHtml(it.kind)}" data-id="${escapeHtml(it.id)}">
       <div>
         <div class="name">${escapeHtml(it.name)}</div>
         <div class="meta">${escapeHtml(it.meta || "")}</div>
@@ -200,16 +211,6 @@ function showSuggest(items){
       <div class="kind">${escapeHtml(it.kindLabel)}</div>
     </div>
   `).join("");
-
-  box.querySelectorAll(".row").forEach(row=>{
-    row.addEventListener("click", ()=>{
-      const kind = row.getAttribute("data-kind");
-      const id = row.getAttribute("data-id");
-      hideSuggest();
-      if (kind === "dog") window.open(`dog.html?id=${encodeURIComponent(id)}`, "_blank");
-      if (kind === "customer") window.open(`customer.html?id=${encodeURIComponent(id)}`, "_blank");
-    });
-  });
 }
 
 async function refreshSuggest(){
@@ -254,7 +255,7 @@ async function runSearch(){
   alert("Use as sugestões da busca para abrir a ficha.");
 }
 
-/* ---------- Weekdays UI ---------- */
+/* ---------- Weekdays UI (new dog only) ---------- */
 function renderWeekdays(containerId, group){
   const root = $(containerId);
   root.className = "weekdays";
@@ -302,13 +303,24 @@ function wire(){
   renderWeekdays("rgCrecheDays", "creche");
   renderWeekdays("rgTransDays", "transporte");
 
+  // delegated click on suggest list (no per-row listeners)
+  $("searchSuggest").addEventListener("click", (e)=>{
+    const row = e.target.closest(".row");
+    if (!row) return;
+    const kind = row.getAttribute("data-kind");
+    const id = row.getAttribute("data-id");
+    hideSuggest();
+    if (kind === "dog") window.open(`dog.html?id=${encodeURIComponent(id)}`, "_blank");
+    if (kind === "customer") window.open(`customer.html?id=${encodeURIComponent(id)}`, "_blank");
+  });
+
   document.addEventListener("click", (e)=>{
     if (!e.target.closest(".searchWrap")) hideSuggest();
   });
 
   $("searchInput").addEventListener("input", ()=>{
     clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(()=>{ refreshSuggest().catch(()=>{}); }, 180);
+    _searchTimer = setTimeout(()=>{ refreshSuggest().catch(()=>{}); }, 220);
   });
 
   $("searchInput").addEventListener("keydown", (e)=>{
@@ -323,7 +335,6 @@ function wire(){
   $("btnGenerate").addEventListener("click", async ()=>{
     try{
       const startDate = todayISO();
-      // This is a write-heavy operation; still OK to await once
       const r = await apiJsonp("generateFromRegular", { startDate, days: 14 });
       if (!r.ok) throw new Error(r.error || "Falha ao gerar agenda.");
       alert(`Agenda gerada: ${r.created} serviços (janela ${r.startDate} → ${r.days} dias)`);
@@ -361,13 +372,10 @@ function wire(){
     };
     if (!payload.date || !payload.dogId) return alert("Preencha data e cachorro.");
 
-    // await once, but DO NOT full reload unless it’s today
     const r = await apiJsonp("addService", payload);
     if (!r.ok) return alert(r.error || "Falha ao salvar serviço.");
 
     closeDialog("serviceDialog");
-
-    // Fast UI: if service is for today, force refresh once; otherwise no need
     if (payload.date === todayISO()) await loadToday({ force: true });
   });
 
@@ -424,8 +432,6 @@ function wire(){
     if (!r.ok) return alert(r.error || "Falha ao salvar cliente.");
 
     closeDialog("customerDialog");
-
-    // refresh lookups once (cached + backend cache makes this quick)
     await loadLookups();
   });
 
@@ -509,7 +515,6 @@ async function boot({ forceToday = false } = {}){
     const ping = await apiJsonp("ping", {});
     if (!ping.ok) throw new Error(ping.error || "API offline.");
 
-    // Start background sync if queue exists
     if (queueSize() > 0) processQueue().catch(()=>{});
 
     setApiStatus("API OK");
@@ -517,7 +522,6 @@ async function boot({ forceToday = false } = {}){
     await loadLookups();
     await loadToday({ force: forceToday });
 
-    // periodic light refresh (optional): keep homepage fresh without constant reloads
     setInterval(()=> loadToday().catch(()=>{}), 60_000);
   }catch(err){
     console.error(err);
@@ -527,6 +531,7 @@ async function boot({ forceToday = false } = {}){
 }
 
 (function init(){
+  wireEventsDelegation();
   wire();
   boot();
 })();
