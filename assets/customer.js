@@ -1,103 +1,164 @@
-let _customer = null;
+// Customer.js — Tutor do cão (Cliente)
+//
+// Objetivo deste arquivo:
+// - Definir a estrutura "Customer" exatamente como você descreveu.
+// - Implementar APENAS leis estruturais: regras que garantem que o Customer isolado é bem-formado.
+// - Não faz validação relacional (ex.: se dogIds existem de verdade) — isso fica para regras de negócio depois.
+//
+// Convenções usadas:
+// - `id` pode ser null por enquanto, porque você ainda não definiu como os IDs serão gerados.
+// - Se `id` existir, deve ser texto não vazio.
+// - Créditos devem ser inteiros >= 0.
+// - Arrays de ids devem conter apenas strings não vazias.
 
-function badge(text){ return `<span class="badge">${escapeHtml(text)}</span>`; }
+export class Customer {
+  constructor(data = {}) {
+    // ---------------------------
+    // Campos principais (dados do tutor)
+    // ---------------------------
 
-function labelType(t){
-  const m = { creche:"Creche", diaria:"Diária", banho:"Banho", tosa_higienica:"Tosa higiênica", transporte:"Transporte", outro:"Outro" };
-  return m[t] || t;
-}
+    // id: identificador único do cliente. Pode ser null por enquanto.
+    this.id = data.id ?? null;
 
-function openDialog(id){ $(id).showModal(); }
-function closeDialog(id){ $(id).close(); }
+    // nome: obrigatório
+    this.nome = data.nome ?? "";
 
-function renderCustomer(c){
-  $("title").textContent = c.name ? `Cliente — ${c.name}` : "Cliente";
-  $("subtitle").textContent = c.whatsapp ? `WhatsApp: ${c.whatsapp}` : "";
+    // telefoneWhatsApp: opcional neste momento (mas deve ser string)
+    // (mais tarde podemos validar formato BR, ex: (11) 91234-5678)
+    this.telefoneWhatsApp = data.telefoneWhatsApp ?? "";
 
-  $("custCard").innerHTML = `
-    <div class="section-title">Dados</div>
-    <div class="sub">Email: ${escapeHtml(c.email || "-")}</div>
-    <div class="sub">Endereço: ${escapeHtml(c.address || "-")}</div>
-    <hr class="sep"/>
-    <div class="sub"><b>Créditos:</b> creche ${escapeHtml(c.creditCreche||0)} • transporte ${escapeHtml(c.creditTransp||0)} • banho ${escapeHtml(c.creditBanho||0)}</div>
-  `;
-}
+    // email: opcional (mas deve ser string)
+    this.email = data.email ?? "";
 
-function renderServices(list){
-  const root = $("serviceList");
-  root.innerHTML = "";
-  if (!list.length){
-    root.innerHTML = `<div class="event"><div class="event__title">Nenhum serviço registrado.</div></div>`;
-    return;
+    // endereco: opcional (mas deve ser string)
+    this.endereco = data.endereco ?? "";
+
+    // ---------------------------
+    // Ligações para outros objetos (aqui apenas IDs)
+    // ---------------------------
+
+    // dogIds: lista de IDs de cães que pertencem a este tutor.
+    // Se vier algo que não é array, normalizamos para array vazio.
+    this.dogIds = Array.isArray(data.dogIds) ? data.dogIds : [];
+
+    // servicoIds: lista de IDs de serviços passados/futuros associados ao tutor.
+    // (Pode ser derivável depois, mas você pediu explícito.)
+    this.servicoIds = Array.isArray(data.servicoIds) ? data.servicoIds : [];
+
+    // ---------------------------
+    // Créditos
+    // ---------------------------
+
+    // creditosCreche / Transporte / Banho:
+    // Armazenamos como números inteiros não negativos.
+    this.creditosCreche = data.creditosCreche ?? 0;
+    this.creditosTransporte = data.creditosTransporte ?? 0;
+    this.creditosBanho = data.creditosBanho ?? 0;
+
+    // Chamamos validate() aqui para garantir que um Customer recém-criado já nasce válido.
+    // Se houver erro, ele aparece imediatamente (bom para detectar bugs cedo).
+    this.validate();
   }
-  list.slice().reverse().forEach(s=>{
-    const el = document.createElement("div");
-    el.className = "event bg-hotelOpen";
-    el.innerHTML = `
-      <div class="event__title">${escapeHtml(labelType(s.type))} — ${escapeHtml(s.dogName || "Cachorro")}</div>
-      <div class="event__meta">${escapeHtml(s.date || "")} ${s.source==="regular" ? "• Regular" : ""}</div>
-      <div class="event__badges">
-        ${badge(`R$ ${formatMoney(s.price||0)}`)}
-        ${badge(s.operStatus || "")}
-      </div>
-    `;
-    root.appendChild(el);
-  });
-}
 
-function wireEditCustomer(){
-  $("btnCancelCustomerEdit").addEventListener("click", ()=> closeDialog("customerEditDialog"));
+  validate() {
+    // ---------------------------
+    // Regras estruturais para id
+    // ---------------------------
+    // id pode ser null. Se não for null, deve ser string não vazia.
+    if (this.id !== null) Customer._assertNonEmptyString("id", this.id);
 
-  $("btnEditCustomer").addEventListener("click", ()=>{
-    if (!_customer) return;
+    // ---------------------------
+    // Regras estruturais para dados do tutor
+    // ---------------------------
 
-    $("ecName").value = _customer.name || "";
-    $("ecWhatsapp").value = _customer.whatsapp || "";
-    $("ecEmail").value = _customer.email || "";
-    $("ecAddress").value = _customer.address || "";
-    $("ecCreditCreche").value = Number(_customer.creditCreche || 0);
-    $("ecCreditTransp").value = Number(_customer.creditTransp || 0);
-    $("ecCreditBanho").value = Number(_customer.creditBanho || 0);
+    // nome é obrigatório: string não vazia
+    Customer._assertNonEmptyString("nome", this.nome);
 
-    openDialog("customerEditDialog");
-  });
+    // outros campos são opcionais, mas se existirem devem ser strings
+    Customer._assertString("telefoneWhatsApp", this.telefoneWhatsApp);
+    Customer._assertString("email", this.email);
+    Customer._assertString("endereco", this.endereco);
 
-  $("customerEditForm").addEventListener("submit", async (e)=>{
-    e.preventDefault();
-    if (!_customer) return;
+    // ---------------------------
+    // Regras estruturais para créditos
+    // ---------------------------
+    // Convertemos para inteiro e garantimos que não é negativo.
+    this.creditosCreche = Customer._toIntNonNegative("creditosCreche", this.creditosCreche);
+    this.creditosTransporte = Customer._toIntNonNegative("creditosTransporte", this.creditosTransporte);
+    this.creditosBanho = Customer._toIntNonNegative("creditosBanho", this.creditosBanho);
 
-    const payload = {
-      id: _customer.id,
-      name: $("ecName").value.trim(),
-      whatsapp: $("ecWhatsapp").value.trim(),
-      email: $("ecEmail").value.trim(),
-      address: $("ecAddress").value.trim(),
-      creditCreche: Number($("ecCreditCreche").value || 0),
-      creditTransp: Number($("ecCreditTransp").value || 0),
-      creditBanho: Number($("ecCreditBanho").value || 0),
+    // ---------------------------
+    // Regras estruturais para listas de IDs
+    // ---------------------------
+    // dogIds e servicoIds devem ser arrays só de strings não vazias.
+    Customer._assertIdArray("dogIds", this.dogIds);
+    Customer._assertIdArray("servicoIds", this.servicoIds);
+  }
+
+  toJSON() {
+    // Retorna um objeto literal (plain object) pronto para salvar como JSON.
+    // Incluímos um campo "tipo" para ajudar a identificar o que é ao carregar.
+    return {
+      tipo: "Customer",
+      id: this.id,
+      nome: this.nome,
+      telefoneWhatsApp: this.telefoneWhatsApp,
+      email: this.email,
+      endereco: this.endereco,
+      dogIds: this.dogIds,
+      creditosCreche: this.creditosCreche,
+      creditosTransporte: this.creditosTransporte,
+      creditosBanho: this.creditosBanho,
+      servicoIds: this.servicoIds,
     };
+  }
 
-    const r = await apiJsonp("updateCustomer", payload);
-    if (!r.ok) return alert(r.error || "Falha ao atualizar cliente.");
+  static fromJSON(obj) {
+    // Reconstrói a classe a partir de um objeto vindo do JSON.
+    // Aqui assumimos que obj já tem os campos no formato esperado;
+    // validate() vai pegar o que estiver errado.
+    return new Customer(obj || {});
+  }
 
-    closeDialog("customerEditDialog");
-    await boot();
-  });
+  // =========================================================
+  // Helpers estruturais (privados por convenção)
+  // =========================================================
+
+  static _assertString(field, v) {
+    // Exige que o valor seja do tipo string.
+    if (typeof v !== "string") {
+      throw new Error(`Customer.${field}: deve ser texto.`);
+    }
+  }
+
+  static _assertNonEmptyString(field, v) {
+    // Exige string não vazia (após trim).
+    if (typeof v !== "string" || v.trim() === "") {
+      throw new Error(`Customer.${field}: não pode ser vazio.`);
+    }
+  }
+
+  static _toIntNonNegative(field, v) {
+    // Converte para número e exige inteiro >= 0.
+    const n = Number(v);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) {
+      throw new Error(`Customer.${field}: deve ser inteiro.`);
+    }
+    if (n < 0) {
+      throw new Error(`Customer.${field}: não pode ser negativo.`);
+    }
+    return n;
+  }
+
+  static _assertIdArray(field, arr) {
+    // Exige array de strings não vazias.
+    if (!Array.isArray(arr)) {
+      throw new Error(`Customer.${field}: deve ser lista (array).`);
+    }
+    for (const x of arr) {
+      if (typeof x !== "string" || x.trim() === "") {
+        throw new Error(`Customer.${field}: contém id inválido.`);
+      }
+    }
+  }
 }
-
-async function boot(){
-  const id = qs("id");
-  if (!id) return alert("Falta ?id=");
-
-  const r1 = await apiJsonp("getCustomer", { id });
-  if (!r1.ok) return alert(r1.error || "Falha ao carregar cliente.");
-
-  _customer = r1.customer;
-
-  // services can come either from getCustomer() or getCustomerServices()
-  renderCustomer(r1.customer);
-  renderServices(r1.services || []);
-}
-
-wireEditCustomer();
-boot().catch(e=>alert(e.message||String(e)));
